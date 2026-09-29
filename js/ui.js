@@ -172,10 +172,11 @@ class TitleScreen {
       { label: '2 PLAYER CHAMPIONSHIP', action: () => Game.set(new DriverSelectScreen(2, drivers => Champ.start(2, drivers))) },
       { label: 'CONTINUE CHAMPIONSHIP', visible: () => Champ.hasSave(), action: () => Champ.resume() },
       { label: 'QUICK RACE', action: () => Game.set(new PlayerCountScreen()) },
+      { label: 'PRACTICE', action: () => Game.set(new DriverSelectScreen(1, d => Game.set(new TrackSelectScreen(d, { practice: true })))) },
       { label: 'HOW TO PLAY', action: () => Game.set(new HelpScreen()) },
       { label: () => 'SOUND: ' + (SFX.muted ? 'OFF' : 'ON'), action: () => SFX.toggleMute(), left: () => SFX.toggleMute(), right: () => SFX.toggleMute() },
       { label: () => 'MUSIC: ' + (SFX.musicOn ? 'ON' : 'OFF'), action: () => SFX.toggleMusic(), left: () => SFX.toggleMusic(), right: () => SFX.toggleMusic() },
-    ], { y: 250, w: 420, h: 30, gap: 6, size: 12 });
+    ], { y: 236, w: 420, h: 28, gap: 5, size: 12 });
   }
   enter() { SFX.stopEngines(); SFX.playSong('menu'); }
   update(dt) {
@@ -354,18 +355,19 @@ class DriverSelectScreen {
   }
 }
 
-// --- Track select (quick race) ---------------------------------------------
+// --- Track select (quick race or practice) ---------------------------------
 class TrackSelectScreen {
-  constructor(drivers) {
+  constructor(drivers, opts = {}) {
     this.drivers = drivers;
+    this.practice = !!opts.practice;
     this.sel = loadJSON('cc_lastTrack', 0) % TRACKS.length;
     this.tracks = TRACKS.map(d => new Track(d));
     this.t = 0;
     this.laps = 3;
     this.menu = new Menu([
       { label: () => '< ' + this.tracks[this.sel].name + ' >', left: () => this.cycle(-1), right: () => this.cycle(1), action: () => this.cycle(1) },
-      { label: () => '< LAPS: ' + this.laps + ' >', left: () => { this.laps = Math.max(1, this.laps - 1); }, right: () => { this.laps = Math.min(9, this.laps + 1); }, action: () => { this.laps = this.laps % 9 + 1; } },
-      { label: 'START RACE', action: () => this.start() },
+      { label: () => '< LAPS: ' + this.laps + ' >', visible: () => !this.practice, left: () => { this.laps = Math.max(1, this.laps - 1); }, right: () => { this.laps = Math.min(9, this.laps + 1); }, action: () => { this.laps = this.laps % 9 + 1; } },
+      { label: () => (this.practice ? 'START PRACTICE' : 'START RACE'), action: () => this.start() },
       { label: 'BACK', action: () => Game.set(new TitleScreen()) },
     ], { y: 360, w: 480, h: 30, gap: 6, size: 11 });
   }
@@ -376,6 +378,11 @@ class TrackSelectScreen {
       driver: d, slot: this.drivers.length > 1 ? (i ? 'p2' : 'p1') : 'solo',
       upgrades: { engine: 1, tires: 1, armor: 1 }, bonusAmmo: 0,
     }));
+    if (this.practice) {
+      const make = () => new Race({ trackDef: TRACKS[this.sel], humans, aiDrivers: [], practice: true });
+      Game.set(new RaceScreen(make, null, { onChangeTrack: () => Game.set(new TrackSelectScreen(this.drivers, { practice: true })) }));
+      return;
+    }
     const ai = DRIVERS.filter(d => !this.drivers.includes(d));
     const make = () => new Race({ trackDef: TRACKS[this.sel], humans, aiDrivers: ai, aiLevel: 3, laps: this.laps });
     Game.set(new RaceScreen(make, results => Game.set(new ResultsScreen(results, null, make))));
@@ -387,7 +394,7 @@ class TrackSelectScreen {
   }
   draw(ctx) {
     drawBackdrop(ctx, this.t);
-    drawHeading(ctx, 'SELECT TRACK', 18);
+    drawHeading(ctx, this.practice ? 'PRACTICE: SELECT TRACK' : 'SELECT TRACK', 18);
     const tr = this.tracks[this.sel];
     drawPanel(ctx, 180, 70, 600, 270);
     drawTrackPreview(ctx, tr, 196, 86, 380, 238);
@@ -398,6 +405,11 @@ class TrackSelectScreen {
     text(ctx, (tr.length / 1000 * 0.25).toFixed(2) + ' MI', 596, 186, 10, PAL.white);
     text(ctx, 'SURFACE', 596, 214, 8, PAL.grey);
     text(ctx, tr.theme.grip < 0.8 ? 'ICY' : tr.theme.offDamage ? 'HOT ASH' : 'NORMAL', 596, 228, 10, tr.theme.grip < 0.8 ? PAL.cyan : tr.theme.offDamage ? PAL.orange : PAL.white);
+    if (this.practice) {
+      const rec = loadJSON('cc_record_' + tr.name, null);
+      text(ctx, 'LAP RECORD', 596, 256, 8, PAL.grey);
+      text(ctx, rec != null ? fmtTime(rec) : 'NONE YET', 596, 270, 10, PAL.gold);
+    }
     text(ctx, (this.sel + 1) + ' / ' + TRACKS.length, 596, 300, 10, PAL.grey);
     this.menu.draw(ctx);
   }
@@ -405,7 +417,8 @@ class TrackSelectScreen {
 
 // --- Race wrapper with pause menu -----------------------------------------
 class RaceScreen {
-  constructor(makeRace, onDone, header) {
+  // opts.onChangeTrack adds a CHANGE TRACK option to the pause menu (practice).
+  constructor(makeRace, onDone, opts = {}) {
     this.makeRace = makeRace;
     this.race = makeRace();
     this.onDone = onDone;
@@ -413,7 +426,8 @@ class RaceScreen {
     this.isRace = true;
     this.pauseMenu = new Menu([
       { label: 'RESUME', action: () => { this.paused = false; } },
-      { label: 'RESTART RACE', visible: () => !Champ.active, action: () => { this.race = this.makeRace(); this.paused = false; } },
+      { label: () => (this.race.practice ? 'RESTART PRACTICE' : 'RESTART RACE'), visible: () => !Champ.active, action: () => { this.race = this.makeRace(); this.paused = false; } },
+      { label: 'CHANGE TRACK', visible: () => !!opts.onChangeTrack, action: () => { SFX.stopEngines(); opts.onChangeTrack(); } },
       { label: 'QUIT TO TITLE', action: () => { SFX.stopEngines(); Game.set(new TitleScreen()); } },
     ], { y: 230, w: 340 });
   }

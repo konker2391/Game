@@ -40,6 +40,8 @@ python3 -m http.server 8000
   Arrow pads on the road give a speed boost.
 - **2-player split screen** for both championship and quick race.
 - **Quick race**: any track, 1–9 laps.
+- **Practice**: drive any track alone to learn it. There are no rivals, crates, weapons or damage. Laps are unlimited
+  and timed, with last, best and saved record lap times for each track.
 - The AI takes racing lines, hunts crates, dodges hazards and fires back.
 - Chiptune soundtrack and synthesized sound effects. Press `M` to mute.
 - Keyboard, gamepad and touch controls.

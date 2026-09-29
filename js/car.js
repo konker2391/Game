@@ -31,7 +31,7 @@ class Car {
     this.idx = -1; this.s = 0; this.lat = 0; this.lap = 0; this.prevS = 0;
     this.surface = 0;
     this.finished = false; this.finishTime = 0; this.place = 0;
-    this.lapStart = 0; this.bestLap = Infinity;
+    this.maxLap = 0; this.lapStart = 0; this.bestLap = Infinity; this.lastLap = null;
 
     this.dead = false; this.respawnT = 0;
     this.boostT = 0; this.stunT = 0; this.frozenT = 0; this.spinT = 0; this.spinDir = 1;

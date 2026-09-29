@@ -2,11 +2,15 @@
 // A single race: simulation, weapons, pickups, effects, cameras and HUD.
 
 class Race {
-  // opts: { trackDef, humans: [{driver, slot, upgrades, bonusAmmo}], aiDrivers, aiLevel, attract }
+  // opts: { trackDef, humans: [{driver, slot, upgrades, bonusAmmo}], aiDrivers, aiLevel, attract, practice }
+  // Practice: a lone car, no crates, weapons or damage, unlimited timed laps.
   constructor(opts) {
     this.track = new Track(opts.trackDef);
     this.laps = opts.laps || this.track.laps;
     this.attract = !!opts.attract;
+    this.practice = !!opts.practice;
+    this.recordKey = 'cc_record_' + this.track.name;
+    this.record = this.practice ? loadJSON(this.recordKey, null) : null;
     this.cars = [];
     this.humans = [];
     this.projectiles = [];
@@ -18,7 +22,7 @@ class Race {
     this.finishOrder = [];
     this.time = 0;
     this.t = 0;
-    this.state = this.attract ? 'racing' : 'countdown';
+    this.state = this.attract || this.practice ? 'racing' : 'countdown';
     this.countdown = 3.6;
     this.lastBeep = 4;
     this.endTimer = 0;
@@ -27,7 +31,7 @@ class Race {
 
     const lvl = opts.aiLevel || 0;
     const aiUpg = { engine: Math.min(4, Math.floor(lvl / 2)), tires: Math.min(4, Math.floor(lvl / 2)), armor: Math.min(4, Math.floor(lvl / 3)) };
-    const aiCars = opts.aiDrivers.map(d => new Car(d, {
+    const aiCars = (this.practice ? [] : opts.aiDrivers).map(d => new Car(d, {
       upgrades: aiUpg, speedMul: 0.86 + lvl * 0.018 + rand(-0.015, 0.015), bonusAmmo: Math.floor(lvl / 2),
     }));
     const humanCars = (opts.humans || []).map((h, i) => new Car(h.driver, {
@@ -47,7 +51,7 @@ class Race {
     this.humans = humanCars;
     this.baseSpeedMul = new Map(aiCars.map(c => [c, c.speedMul]));
 
-    this.pickups = this.track.pickupSpots.map(p => ({ ...p, active: true, respawnT: 0 }));
+    this.pickups = this.practice ? [] : this.track.pickupSpots.map(p => ({ ...p, active: true, respawnT: 0 }));
     this.cams = (this.humans.length ? this.humans : [this.cars[0]]).map(c => ({ x: c.x, y: c.y, shake: 0, target: c }));
     this.sortPositions();
   }
@@ -119,12 +123,12 @@ class Race {
     }
     if (this.state === 'countdown') return;
     const ctl = c.ctl;
-    const canAct = !c.frozenT && !c.stunT;
+    const canAct = !c.frozenT && !c.stunT && !this.practice;
     if (ctl.special && canAct && c.ammo > 0 && c.fireCd <= 0) {
       this.fire(c, c.driver.special);
       c.ammo--;
       c.fireCd = WEAPONS[c.driver.special].cd;
-    } else if (ctl.special && c.human && c.ammo <= 0) {
+    } else if (ctl.special && c.human && c.ammo <= 0 && !this.practice) {
       if (c.fireCd <= 0) { SFX.play('deny', 0.5); c.fireCd = 0.4; }
     }
     if (ctl.item && canAct && c.item) {
@@ -283,20 +287,40 @@ class Race {
     const L = this.track.length;
     if (c.prevS > L * 0.75 && c.s < L * 0.25) {
       c.lap++;
-      if (c.lap >= 2 && !c.finished) {
-        const lt = this.time - c.lapStart;
-        if (lt < c.bestLap) c.bestLap = lt;
-      }
-      c.lapStart = this.time;
-      if (c.lap > this.laps && !c.finished) this.finishCar(c);
-      else if (c.human && c.lap > 1 && !this.attract) {
-        SFX.play('lap');
-        this.message(c, c.lap === this.laps ? 'FINAL LAP!' : 'LAP ' + c.lap, '#ffe066');
+      // Only a lap reached for the first time counts, so reversing back over the line
+      // and crossing again cannot produce a short lap.
+      if (c.lap > c.maxLap) {
+        c.maxLap = c.lap;
+        if (c.lap >= 2 && !c.finished) this.recordLap(c, this.time - c.lapStart);
+        c.lapStart = this.time;
+        if (this.practice) {
+          if (c.lap === 1) this.message(c, 'TIMING STARTED', '#8ff3ff');
+        } else if (c.lap > this.laps && !c.finished) this.finishCar(c);
+        else if (c.human && c.lap > 1 && !this.attract) {
+          SFX.play('lap');
+          this.message(c, c.lap === this.laps ? 'FINAL LAP!' : 'LAP ' + c.lap, '#ffe066');
+        }
       }
     } else if (c.prevS < L * 0.25 && c.s > L * 0.75) {
       c.lap--;
     }
     c.prevS = c.s;
+  }
+
+  recordLap(c, lt) {
+    c.lastLap = lt;
+    if (lt < c.bestLap) c.bestLap = lt;
+    if (!this.practice || !c.human) return;
+    if (this.record == null || lt < this.record) {
+      const first = this.record == null;
+      this.record = lt;
+      saveJSON(this.recordKey, lt);
+      SFX.play('finish');
+      this.message(c, (first ? 'LAP ' : 'NEW RECORD! ') + fmtTime(lt), '#7dff7a', 2.5);
+    } else {
+      SFX.play('lap');
+      this.message(c, 'LAP ' + fmtTime(lt) + '  (+' + (lt - this.record).toFixed(2) + ')', '#ffe066', 2.5);
+    }
   }
 
   finishCar(c) {
@@ -416,7 +440,7 @@ class Race {
 
   damage(c, amt, attacker, silent) {
     if (c.dead || c.invulnT > 0 || c.ramT > 0 || amt <= 0) return;
-    if (this.state === 'countdown') return;
+    if (this.state === 'countdown' || this.practice) return;
     c.hp -= amt;
     if (!silent || amt > 4) c.flashT = 0.12;
     if (c.human && amt > 3) this.shake(c, Math.min(10, amt / 3));
@@ -820,42 +844,10 @@ class Race {
   drawHud(ctx, car, vp, split) {
     const x0 = vp.x, y0 = vp.y, w = vp.w, h = vp.h;
     const pad = 12;
-
-    // Position + lap.
-    const placeStr = ordinal(car.place);
-    const placeCol = car.place <= QUALIFY_PLACE ? '#ffe066' : '#ff8a5a';
-    text(ctx, placeStr, x0 + pad, y0 + pad, split ? 22 : 30, placeCol, 'left', '#000');
-    text(ctx, '/' + this.cars.length, x0 + pad + (split ? 22 : 30) * placeStr.length + 4, y0 + pad + (split ? 10 : 14), 12, '#fff');
-    const lapShown = clamp(car.lap, 1, this.laps);
-    text(ctx, 'LAP ' + lapShown + '/' + this.laps, x0 + pad, y0 + pad + (split ? 30 : 40), 12, '#fff');
-
-    // Time & cash.
-    text(ctx, fmtTime(this.time), x0 + w - pad, y0 + pad, 12, '#fff', 'right');
-    text(ctx, fmtMoney(car.raceCash), x0 + w - pad, y0 + pad + 20, 10, '#9fe39f', 'right');
-    if (isFinite(car.bestLap)) text(ctx, 'BEST ' + fmtTime(car.bestLap), x0 + w - pad, y0 + pad + 36, 8, '#bbb', 'right');
-
-    // Armor bar.
     // With on-screen touch buttons, the bottom corners are covered, so dock the HUD at the top.
     const touchUI = Game.touchUI;
-    const bw = split ? 150 : 200, bx = x0 + pad, by = touchUI ? y0 + 110 : y0 + h - pad - 60;
-    text(ctx, 'ARMOR', bx, by - 14, 8, '#fff');
-    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 14);
-    const hpK = clamp(car.hp / car.maxHp, 0, 1);
-    ctx.fillStyle = hpK > 0.5 ? '#3ad65a' : hpK > 0.25 ? '#f2c318' : (Math.floor(this.t * 6) % 2 ? '#ff3030' : '#a01010');
-    ctx.fillRect(bx, by, bw * hpK, 10);
-    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(bx, by, bw * hpK, 3);
-
-    // Special + item boxes.
-    const iy = by + 18;
-    const box = (x, label, icon, count, dim) => {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x, iy, 36, 36);
-      ctx.strokeStyle = dim ? '#555' : '#ffe066'; ctx.lineWidth = 2; ctx.strokeRect(x, iy, 36, 36);
-      if (icon) { ctx.globalAlpha = dim ? 0.35 : 1; drawIcon(ctx, icon, x + 18, iy + 18, 24); ctx.globalAlpha = 1; }
-      if (count != null) text(ctx, 'x' + count, x + 40, iy + 22, 10, dim ? '#888' : '#fff');
-      text(ctx, label, x, iy - 10 + 48, 6, '#aaa');
-    };
-    box(bx, 'SPECIAL', car.driver.special, car.ammo, car.ammo <= 0);
-    box(bx + (split ? 80 : 90), 'ITEM', car.item, null, !car.item);
+    if (this.practice) this.drawPracticeTimes(ctx, car, x0, y0, w, h, pad, touchUI);
+    else this.drawRaceStatus(ctx, car, x0, y0, w, h, pad, split, touchUI);
 
     // Speed.
     if (!split && !touchUI) {
@@ -908,5 +900,59 @@ class Race {
       text(ctx, ordinal(this.finishOrder.indexOf(car) + 1) + ' PLACE', cx, y0 + h * 0.4, split ? 18 : 26, car.place <= QUALIFY_PLACE ? '#7dff7a' : '#ff8a5a', 'center');
       if (this.state !== 'finished') text(ctx, 'WAITING FOR OTHER PLAYER', cx, y0 + h * 0.4 + 36, 8, '#fff', 'center');
     }
+  }
+
+  drawPracticeTimes(ctx, car, x0, y0, w, h, pad, touchUI) {
+    text(ctx, 'PRACTICE', x0 + pad, y0 + pad, 10, '#8ff3ff');
+    text(ctx, car.maxLap >= 1 ? 'LAP ' + car.maxLap : 'OUT LAP', x0 + pad, y0 + pad + 18, 22, '#ffe066');
+    const cur = car.maxLap >= 1 ? fmtTime(this.time - car.lapStart) : '--:--.--';
+    text(ctx, cur, x0 + pad, y0 + pad + 50, 16, '#fff');
+    const rows = [
+      ['LAST', car.lastLap, '#fff'],
+      ['BEST', car.bestLap, '#7dff7a'],
+      ['RECORD', this.record, '#ffe066'],
+    ];
+    rows.forEach(([label, v, col], i) => {
+      const y = y0 + pad + i * 20;
+      text(ctx, label, x0 + w - pad - 118, y + 2, 8, '#bbb');
+      text(ctx, v != null && isFinite(v) ? fmtTime(v) : '--:--.--', x0 + w - pad, y, 12, col, 'right');
+    });
+    if (!touchUI) text(ctx, 'ESC: MENU', x0 + pad, y0 + h - pad - 10, 8, '#bbb');
+  }
+
+  drawRaceStatus(ctx, car, x0, y0, w, h, pad, split, touchUI) {
+    // Position + lap.
+    const placeStr = ordinal(car.place);
+    const placeCol = car.place <= QUALIFY_PLACE ? '#ffe066' : '#ff8a5a';
+    text(ctx, placeStr, x0 + pad, y0 + pad, split ? 22 : 30, placeCol, 'left', '#000');
+    text(ctx, '/' + this.cars.length, x0 + pad + (split ? 22 : 30) * placeStr.length + 4, y0 + pad + (split ? 10 : 14), 12, '#fff');
+    const lapShown = clamp(car.lap, 1, this.laps);
+    text(ctx, 'LAP ' + lapShown + '/' + this.laps, x0 + pad, y0 + pad + (split ? 30 : 40), 12, '#fff');
+
+    // Time & cash.
+    text(ctx, fmtTime(this.time), x0 + w - pad, y0 + pad, 12, '#fff', 'right');
+    text(ctx, fmtMoney(car.raceCash), x0 + w - pad, y0 + pad + 20, 10, '#9fe39f', 'right');
+    if (isFinite(car.bestLap)) text(ctx, 'BEST ' + fmtTime(car.bestLap), x0 + w - pad, y0 + pad + 36, 8, '#bbb', 'right');
+
+    // Armor bar.
+    const bw = split ? 150 : 200, bx = x0 + pad, by = touchUI ? y0 + 110 : y0 + h - pad - 60;
+    text(ctx, 'ARMOR', bx, by - 14, 8, '#fff');
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 14);
+    const hpK = clamp(car.hp / car.maxHp, 0, 1);
+    ctx.fillStyle = hpK > 0.5 ? '#3ad65a' : hpK > 0.25 ? '#f2c318' : (Math.floor(this.t * 6) % 2 ? '#ff3030' : '#a01010');
+    ctx.fillRect(bx, by, bw * hpK, 10);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(bx, by, bw * hpK, 3);
+
+    // Special + item boxes.
+    const iy = by + 18;
+    const box = (x, label, icon, count, dim) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x, iy, 36, 36);
+      ctx.strokeStyle = dim ? '#555' : '#ffe066'; ctx.lineWidth = 2; ctx.strokeRect(x, iy, 36, 36);
+      if (icon) { ctx.globalAlpha = dim ? 0.35 : 1; drawIcon(ctx, icon, x + 18, iy + 18, 24); ctx.globalAlpha = 1; }
+      if (count != null) text(ctx, 'x' + count, x + 40, iy + 22, 10, dim ? '#888' : '#fff');
+      text(ctx, label, x, iy - 10 + 48, 6, '#aaa');
+    };
+    box(bx, 'SPECIAL', car.driver.special, car.ammo, car.ammo <= 0);
+    box(bx + (split ? 80 : 90), 'ITEM', car.item, null, !car.item);
   }
 }
