@@ -111,19 +111,15 @@ const Game = {
     window.addEventListener('resize', () => this.resize());
     this.resize();
     window.addEventListener('keydown', e => { if (e.code === 'KeyM') SFX.toggleMute(); });
-    const boot = () => {
-      this.set(new TitleScreen());
-      requestAnimationFrame(t => this.frame(t));
-    };
-    if (document.fonts && document.fonts.load) {
-      Promise.race([document.fonts.load(font(16)), new Promise(r => setTimeout(r, 1500))]).then(boot, boot);
-    } else boot();
+    this.set(new TitleScreen());
+    requestAnimationFrame(t => this.frame(t));
   },
 
   resize() {
     const r = this.canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    this.res = clamp(Math.round((r.width * dpr / VIEW_W) * 4) / 4, 1, 2);
+    // Whole-number resolution keeps the 2x pixel upscale even (no mixed-width pixels).
+    this.res = r.width * dpr / VIEW_W >= 1.5 ? 2 : 1;
     this.canvas.width = VIEW_W * this.res;
     this.canvas.height = VIEW_H * this.res;
   },

@@ -210,7 +210,7 @@ class Track {
 
   _buildDecor(rng) {
     this.decor = [];
-    const b = this.bounds, pad = 500;
+    const b = this.bounds, pad = 380;
     const area = (b.maxX - b.minX + pad * 2) * (b.maxY - b.minY + pad * 2);
     const want = Math.floor(area / 26000);
     for (let tries = 0; this.decor.length < want && tries < want * 6; tries++) {

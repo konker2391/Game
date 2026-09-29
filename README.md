@@ -6,6 +6,9 @@ your winnings in the garage between races.
 
 It is plain HTML5 canvas and JavaScript with no build step and no dependencies. Graphics and sound are generated in code.
 
+The look is modelled on 16-bit Sega Genesis racers. The race renders at half resolution and scales up with hard pixel edges. It uses
+outlined pixel-art car sprites in 32 rotation steps, grainy dithered asphalt, sand and snow textures, and a bitmap pixel font HUD.
+
 ## Play
 
 Open `index.html` in a modern browser. Double-clicking the file works, and so does any static server:
@@ -67,7 +70,8 @@ appear during races.
 | `js/car.js` | Arcade car physics (grip and drift model) |
 | `js/race.js` | Race simulation: laps, collisions, weapons, hazards, effects, cameras, HUD |
 | `js/ai.js` | Computer drivers |
-| `js/render.js` | Procedural car, icon, scenery and track drawing |
+| `js/pixel.js` | Pixel-art rendering: bitmap font, car and item sprites, dithered ground tiles, track texture baking |
+| `js/render.js` | Vector source art for scenery and icons (pixelized by `pixel.js`), menu car previews, minimap |
 | `js/ui.js` | Menus and screens |
 | `js/audio.js` | Web Audio sound effects and music sequencer |
 | `js/input.js` | Keyboard, gamepad, touch and pointer input |

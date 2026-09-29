@@ -82,22 +82,12 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-const FONT_FAMILY = '"Press Start 2P", "Courier New", monospace';
-function font(size) { return `${size}px ${FONT_FAMILY}`; }
-
-// Pixel-style text with a hard drop shadow.
-function text(ctx, str, x, y, size, color, align = 'left', shadowColor = '#000') {
-  ctx.font = font(size);
-  ctx.textAlign = align;
-  ctx.textBaseline = 'top';
-  if (shadowColor) {
-    ctx.fillStyle = shadowColor;
-    const o = Math.max(1, Math.round(size / 8));
-    ctx.fillText(str, x + o, y + o);
-  }
-  ctx.fillStyle = color;
-  ctx.fillText(str, x, y);
+// Bitmap-font text (see pixel.js). `size` is a nominal pixel height, snapped to a
+// whole-pixel glyph scale; the outline colour frames every glyph.
+function text(ctx, str, x, y, size, color, align = 'left', outline = '#000') {
+  pxText(ctx, str, x, y, Math.max(1, Math.round(size / 7)), pxStyle(color, outline), align);
 }
+function textWidth(str, size) { return pxWidth(str, Math.max(1, Math.round(size / 7))); }
 
 function loadJSON(key, fallback) {
   try {

@@ -18,7 +18,6 @@ class Race {
     this.particles = [];
     this.rings = [];
     this.texts = [];
-    this.skids = [];
     this.finishOrder = [];
     this.time = 0;
     this.t = 0;
@@ -195,9 +194,17 @@ class Race {
     if (c.vx * tx + c.vy * ty < -60) c.wrongWayT += dt; else c.wrongWayT = 0;
   }
 
+  // Skid marks are stamped straight into the baked track bitmap, so they persist for free.
   addSkid(a, b) {
-    this.skids.push(a.x, a.y, b.x, b.y);
-    if (this.skids.length > 4800) this.skids.splice(0, 400);
+    const bk = this.bake;
+    if (!bk) return;
+    const Z = bk.Z;
+    const ax = a.x * Z - bk.ox, ay = a.y * Z - bk.oy, bx = b.x * Z - bk.ox, by = b.y * Z - bk.oy;
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay)));
+    bk.ctx.fillStyle = 'rgba(16,14,14,0.2)';
+    for (let k = 1; k <= steps; k++) {
+      bk.ctx.fillRect(Math.round(ax + (bx - ax) * k / steps), Math.round(ay + (by - ay) * k / steps), 1, 1);
+    }
   }
 
   wallCollide(c) {
@@ -683,276 +690,275 @@ class Race {
   }
 
   // --- Drawing -------------------------------------------------------------
+  // The world and HUD are drawn into a half-resolution buffer that is scaled up 2x
+  // with nearest-neighbour filtering, for a chunky 16-bit console look.
   draw(ctx) {
+    const lr = LowRes.get(), lc = lr.ctx;
+    const W = lr.canvas.width, H = lr.canvas.height;
     const n = this.cams.length;
-    const zoom = n > 1 ? 0.72 : 0.9;
+    const Z = n > 1 ? 0.45 : 0.6;
+    if (!this.bake || this.bake.Z !== Z) this.bake = bakeTrackCached(this.track, Z);
     const vps = n > 1
-      ? [{ x: 0, y: 0, w: VIEW_W / 2 - 2, h: VIEW_H }, { x: VIEW_W / 2 + 2, y: 0, w: VIEW_W / 2 - 2, h: VIEW_H }]
-      : [{ x: 0, y: 0, w: VIEW_W, h: VIEW_H }];
-    for (let i = 0; i < n; i++) this.drawView(ctx, this.cams[i], vps[i], zoom);
-    if (n > 1) { ctx.fillStyle = '#000'; ctx.fillRect(VIEW_W / 2 - 2, 0, 4, VIEW_H); }
-    if (!this.attract) for (let i = 0; i < n; i++) this.drawHud(ctx, this.cams[i].target, vps[i], n > 1);
+      ? [{ x: 0, y: 0, w: W / 2 - 1, h: H }, { x: W / 2 + 1, y: 0, w: W / 2 - 1, h: H }]
+      : [{ x: 0, y: 0, w: W, h: H }];
+    lc.fillStyle = '#000'; lc.fillRect(0, 0, W, H);
+    for (let i = 0; i < n; i++) this.drawView(lc, this.cams[i], vps[i], Z);
+    if (!this.attract) for (let i = 0; i < n; i++) this.drawHud(lc, this.cams[i].target, vps[i], n > 1);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(lr.canvas, 0, 0, VIEW_W, VIEW_H);
+    ctx.restore();
   }
 
-  drawView(ctx, cam, vp, zoom) {
-    const tr = this.track;
+  drawView(ctx, cam, vp, Z) {
+    const bk = this.bake;
     ctx.save();
     ctx.beginPath(); ctx.rect(vp.x, vp.y, vp.w, vp.h); ctx.clip();
-    const sx = cam.shake ? rand(-cam.shake, cam.shake) : 0, sy = cam.shake ? rand(-cam.shake, cam.shake) : 0;
-    ctx.translate(vp.x + vp.w / 2, vp.y + vp.h / 2);
-    ctx.scale(zoom, zoom);
-    ctx.translate(-cam.x + sx, -cam.y + sy);
-    const hw = vp.w / 2 / zoom + 20, hh = vp.h / 2 / zoom + 20;
-    const view = { x0: cam.x - hw, y0: cam.y - hh, x1: cam.x + hw, y1: cam.y + hh };
-    const inView = (x, y, m = 60) => x > view.x0 - m && x < view.x1 + m && y > view.y0 - m && y < view.y1 + m;
+    const shx = cam.shake ? Math.round(rand(-cam.shake, cam.shake) * Z) : 0;
+    const shy = cam.shake ? Math.round(rand(-cam.shake, cam.shake) * Z) : 0;
+    const cx = Math.round(cam.x * Z) + shx, cy = Math.round(cam.y * Z) + shy;
+    ctx.translate(vp.x + Math.floor(vp.w / 2) - cx, vp.y + Math.floor(vp.h / 2) - cy);
+    const x0 = cx - vp.w / 2 - 2, y0 = cy - vp.h / 2 - 2, x1 = cx + vp.w / 2 + 2, y1 = cy + vp.h / 2 + 2;
 
-    drawTrackSurface(ctx, tr, view, this.t);
-
-    // Skid marks.
-    ctx.strokeStyle = 'rgba(20,20,20,0.35)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.beginPath();
-    const sk = this.skids;
-    for (let i = 0; i < sk.length; i += 4) {
-      if (!inView(sk[i], sk[i + 1])) continue;
-      ctx.moveTo(sk[i], sk[i + 1]); ctx.lineTo(sk[i + 2], sk[i + 3]);
+    // Ground beyond the baked bitmap, then the visible part of the baked course.
+    if (x0 < bk.ox || y0 < bk.oy || x1 > bk.ox + bk.W || y1 > bk.oy + bk.H) {
+      bk.pattern = bk.pattern || ctx.createPattern(bk.tile, 'repeat');
+      ctx.fillStyle = bk.pattern;
+      ctx.fillRect(Math.floor(x0), Math.floor(y0), Math.ceil(x1 - x0), Math.ceil(y1 - y0));
     }
-    ctx.stroke();
+    const sx = clamp(Math.floor(x0) - bk.ox, 0, bk.W), sy = clamp(Math.floor(y0) - bk.oy, 0, bk.H);
+    const ex = clamp(Math.ceil(x1) - bk.ox, 0, bk.W), ey = clamp(Math.ceil(y1) - bk.oy, 0, bk.H);
+    if (ex > sx && ey > sy) ctx.drawImage(bk.canvas, sx, sy, ex - sx, ey - sy, bk.ox + sx, bk.oy + sy, ex - sx, ey - sy);
+
+    const P = v => Math.round(v * Z);
+    const inView = (x, y, m = 30) => {
+      const X = x * Z, Y = y * Z;
+      return X > x0 - m && X < x1 + m && Y > y0 - m && Y < y1 + m;
+    };
+    const sq = (x, y, size, col) => {
+      ctx.fillStyle = col;
+      ctx.fillRect(Math.round(x * Z - size / 2), Math.round(y * Z - size / 2), size, size);
+    };
 
     // Hazards.
     for (const h of this.hazards) {
       if (!inView(h.x, h.y)) continue;
-      const fade = Math.min(1, h.life / 2);
+      if (h.life < 2 && Math.floor(this.t * 10) % 2) continue;
       if (h.type === 'oil') {
-        ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.rot); ctx.globalAlpha = 0.9 * fade;
-        ctx.fillStyle = '#0b0b0b';
-        ctx.beginPath(); ctx.ellipse(0, 0, h.r, h.r * 0.7, 0, 0, TAU); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(h.r * 0.5, h.r * 0.3, h.r * 0.5, h.r * 0.4, 0.5, 0, TAU); ctx.fill();
-        ctx.fillStyle = 'rgba(120,80,255,0.35)'; ctx.beginPath(); ctx.ellipse(-h.r * 0.2, -h.r * 0.2, h.r * 0.4, h.r * 0.15, 0.3, 0, TAU); ctx.fill();
-        ctx.fillStyle = 'rgba(80,255,200,0.25)'; ctx.beginPath(); ctx.ellipse(h.r * 0.1, h.r * 0.15, h.r * 0.3, h.r * 0.1, -0.3, 0, TAU); ctx.fill();
-        ctx.restore();
+        blitRot(ctx, oilSprite(Z, Math.floor(h.rot) % 3), P(h.x), P(h.y));
       } else {
-        drawIcon(ctx, 'mine', h.x, h.y, 26);
-        if (h.age > 0.7 && Math.floor(this.t * 4) % 2) {
-          ctx.fillStyle = '#ff2020'; ctx.beginPath(); ctx.arc(h.x, h.y, 4, 0, TAU); ctx.fill();
-        }
+        blitRot(ctx, mineSprite(Z), P(h.x), P(h.y));
+        if (h.age > 0.7 && Math.floor(this.t * 4) % 2) { ctx.fillStyle = '#ff2020'; ctx.fillRect(P(h.x) - 1, P(h.y) - 2, 2, 2); }
       }
     }
 
-    // Pickups (floating crates).
+    // Item crates.
     for (const p of this.pickups) {
       if (!p.active || !inView(p.x, p.y)) continue;
-      const bob = Math.sin(this.t * 4 + p.s) * 2;
-      ctx.save(); ctx.translate(p.x, p.y + bob); ctx.rotate(Math.sin(this.t * 2 + p.lat) * 0.2);
-      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(-10, -7, 22, 22);
-      ctx.fillStyle = '#c8872e'; ctx.fillRect(-12, -12, 24, 24);
-      ctx.strokeStyle = '#6b4414'; ctx.lineWidth = 2; ctx.strokeRect(-12, -12, 24, 24);
-      ctx.beginPath(); ctx.moveTo(-12, -12); ctx.lineTo(12, 12); ctx.moveTo(12, -12); ctx.lineTo(-12, 12); ctx.stroke();
-      ctx.fillStyle = '#ffe066'; ctx.font = font(12); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('?', 1, 1);
-      ctx.restore();
+      blitRot(ctx, crateSprite(Z), P(p.x), P(p.y) - (Math.floor(this.t * 3 + p.s) % 2));
     }
 
     // Cars.
     for (const c of this.cars) {
       if (c.dead || !inView(c.x, c.y)) continue;
-      const blink = c.invulnT > 0 && Math.floor(this.t * 12) % 2 === 0;
-      drawCar(ctx, c.driver, c.x, c.y, c.angle, {
-        alpha: blink ? 0.4 : 1, boost: c.boostT > 0, frozen: c.frozenT > 0, flash: c.flashT > 0,
-        ram: c.ramT > 0, stun: c.stunT > 0,
-      });
-    }
-    // Wreck scorch for dead cars.
-    for (const c of this.cars) {
-      if (!c.dead || !inView(c.x, c.y)) continue;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.beginPath(); ctx.ellipse(c.x, c.y, 24, 16, c.angle, 0, TAU); ctx.fill();
+      if (c.invulnT > 0 && Math.floor(this.t * 15) % 2 === 0) continue;
+      const spr = carSprite(c.driver, Z);
+      const X = P(c.x), Y = P(c.y);
+      const fx = Math.cos(c.angle), fy = Math.sin(c.angle), hl = BODY[c.driver.body].len / 2;
+      blitRot(ctx, spr.shadow, X + 2, Y + 3, c.angle);
+      if (c.boostT > 0) {
+        for (let k = 0; k < 3; k++) {
+          const d = hl + 4 + k * 6 + Math.random() * 4;
+          sq(c.x - fx * d, c.y - fy * d, 3 - k, choice(['#fff080', '#ffb030', '#ff6a1a']));
+        }
+      }
+      blitRot(ctx, c.flashT > 0 ? spr.white : c.frozenT > 0 ? spr.frozen : spr.img, X, Y, c.angle);
+      if (c.ramT > 0) {
+        const hw = BODY[c.driver.body].wid / 2;
+        ctx.fillStyle = Math.floor(this.t * 12) % 2 ? '#ffd040' : '#ff6a1a';
+        for (let a = 0; a < TAU; a += 0.22) {
+          const ex = Math.cos(a) * (hl + 9), ey = Math.sin(a) * (hw + 9);
+          ctx.fillRect(P(c.x + ex * fx - ey * fy), P(c.y + ex * fy + ey * fx), 1, 1);
+        }
+      }
+      if (c.stunT > 0) {
+        ctx.fillStyle = '#aef8ff';
+        for (let k = 0; k < 6; k++) ctx.fillRect(X + randInt(-10, 10), Y + randInt(-8, 8), 1 + randInt(0, 1), 1);
+      }
     }
 
     // Projectiles.
     for (const p of this.projectiles) {
       if (!inView(p.x, p.y)) continue;
       if (p.type === 'missile') {
-        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle);
-        ctx.fillStyle = '#ffcf40'; ctx.beginPath(); ctx.moveTo(-8, -3); ctx.lineTo(-16 - Math.random() * 8, 0); ctx.lineTo(-8, 3); ctx.fill();
-        ctx.fillStyle = '#e8e8e8'; ctx.fillRect(-8, -3, 14, 6);
-        ctx.fillStyle = '#e23'; ctx.beginPath(); ctx.moveTo(6, -3); ctx.lineTo(11, 0); ctx.lineTo(6, 3); ctx.fill();
-        ctx.fillRect(-8, -6, 4, 12);
-        ctx.restore();
+        const bx = p.x - Math.cos(p.angle) * 12, by = p.y - Math.sin(p.angle) * 12;
+        sq(bx, by, 2 + randInt(0, 1), choice(['#fff080', '#ffb030']));
+        blitRot(ctx, missileSprite(Z), P(p.x), P(p.y), p.angle);
       } else if (p.type === 'freeze') {
-        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle);
-        ctx.fillStyle = 'rgba(140,220,255,0.5)'; ctx.beginPath(); ctx.ellipse(-6, 0, 18, 7, 0, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(0, 0, 9, 4, 0, 0, TAU); ctx.fill();
-        ctx.restore();
+        sq(p.x - p.vx * 0.012, p.y - p.vy * 0.012, 3, '#7fd8ff');
+        sq(p.x, p.y, 4, '#ffffff');
       } else if (p.type === 'fire') {
         const k = p.age / (p.age + p.life);
-        ctx.fillStyle = k < 0.3 ? 'rgba(255,240,160,0.9)' : k < 0.6 ? 'rgba(255,150,40,0.8)' : 'rgba(200,60,20,0.6)';
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 0.7, 0, TAU); ctx.fill();
+        sq(p.x, p.y, Math.max(2, Math.round(p.r * Z * 0.8)), k < 0.3 ? '#fff0a0' : k < 0.6 ? '#ff9a28' : '#c83c14');
       }
     }
 
     // Particles.
     for (const p of this.particles) {
-      if (!inView(p.x, p.y, 20)) continue;
+      if (!inView(p.x, p.y, 10)) continue;
       const a = p.life / p.max;
-      ctx.globalAlpha = p.kind === 'smoke' ? a * 0.5 : Math.min(1, a * 1.5);
-      ctx.fillStyle = p.color;
-      if (p.kind === 'smoke' || p.kind === 'fire' || p.kind === 'dust') {
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (p.kind === 'fire' ? a : 1), 0, TAU); ctx.fill();
-      } else {
-        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
-      }
+      ctx.globalAlpha = p.kind === 'smoke' ? Math.min(0.7, a * 0.8) : 1;
+      const size = Math.max(1, Math.round(p.size * Z * (p.kind === 'fire' ? 0.5 + a * 0.7 : 1)));
+      sq(p.x, p.y, size, p.color);
     }
     ctx.globalAlpha = 1;
 
-    // Shockwave rings.
+    // Shock rings.
     for (const r of this.rings) {
       const k = r.age / r.life;
-      ctx.strokeStyle = r.color; ctx.globalAlpha = 1 - k; ctx.lineWidth = 6 * (1 - k) + 1;
-      ctx.beginPath(); ctx.arc(r.x, r.y, r.r + (r.max - r.r) * k, 0, TAU); ctx.stroke();
+      const rad = (r.r + (r.max - r.r) * k) * Z;
+      ctx.fillStyle = k < 0.5 ? '#ffffff' : r.color;
+      const steps = Math.max(12, Math.round(TAU * rad / 1.5));
+      const cxp = r.x * Z, cyp = r.y * Z;
+      for (let i = 0; i < steps; i++) {
+        const a = i / steps * TAU;
+        ctx.fillRect(Math.round(cxp + Math.cos(a) * rad), Math.round(cyp + Math.sin(a) * rad), 1, 1);
+      }
     }
-    ctx.globalAlpha = 1;
 
-    drawSceneryInView(ctx, tr, view, this.t);
-
-    // Player markers.
+    // Player tags in split screen.
     if (this.humans.length > 1) {
       for (const c of this.humans) {
         if (c.dead || !inView(c.x, c.y)) continue;
         const col = c.playerIndex === 0 ? '#ffe066' : '#7af0ff';
-        ctx.fillStyle = col;
-        ctx.beginPath(); ctx.moveTo(c.x - 6, c.y - 34); ctx.lineTo(c.x + 6, c.y - 34); ctx.lineTo(c.x, c.y - 26); ctx.fill();
-        text(ctx, 'P' + (c.playerIndex + 1), c.x, c.y - 46, 8, col, 'center');
+        pxText(ctx, 'P' + (c.playerIndex + 1), P(c.x), P(c.y) - 20, 1, pxStyle(col), 'center');
       }
     }
 
     for (const t of this.texts) {
       if (!inView(t.x, t.y)) continue;
-      ctx.globalAlpha = Math.min(1, t.life * 2);
-      text(ctx, t.str, t.x, t.y, 10, t.color, 'center');
+      if (t.life < 0.4 && Math.floor(this.t * 12) % 2) continue;
+      pxText(ctx, t.str, P(t.x), P(t.y), 1, pxStyle(t.color), 'center');
     }
-    ctx.globalAlpha = 1;
-
     ctx.restore();
+  }
 
-    if (tr.theme.night) {
-      const g = ctx.createRadialGradient(vp.x + vp.w / 2, vp.y + vp.h / 2, vp.h * 0.25, vp.x + vp.w / 2, vp.y + vp.h / 2, vp.w * 0.75);
-      g.addColorStop(0, 'rgba(10,0,40,0)'); g.addColorStop(1, 'rgba(10,0,40,0.45)');
-      ctx.fillStyle = g; ctx.fillRect(vp.x, vp.y, vp.w, vp.h);
+  // --- HUD (drawn in the half-resolution buffer) -----------------------------------
+  hudRow(ctx, label, value, x, y, align = 'left', valueStyle = HUD_VALUE) {
+    const lw = pxWidth(label + ' ');
+    if (align === 'left') {
+      pxText(ctx, label, x, y, 1, HUD_LABEL);
+      pxText(ctx, value, x + lw, y, 1, valueStyle);
+    } else {
+      pxText(ctx, value, x, y, 1, valueStyle, 'right');
+      pxText(ctx, label, x - pxWidth(value + ' '), y, 1, HUD_LABEL, 'right');
     }
   }
 
   drawHud(ctx, car, vp, split) {
-    const x0 = vp.x, y0 = vp.y, w = vp.w, h = vp.h;
-    const pad = 12;
-    // With on-screen touch buttons, the bottom corners are covered, so dock the HUD at the top.
+    const x0 = vp.x, y0 = vp.y, w = vp.w, h = vp.h, pad = 6;
+    const xr = x0 + w - pad;
+    // With on-screen touch buttons the bottom corners are covered, so everything docks at the top.
     const touchUI = Game.touchUI;
-    if (this.practice) this.drawPracticeTimes(ctx, car, x0, y0, w, h, pad, touchUI);
-    else this.drawRaceStatus(ctx, car, x0, y0, w, h, pad, split, touchUI);
+    const kmh = Math.round(Math.abs(car.speed) * 0.68);
+    this.hudRow(ctx, 'SPEED', String(kmh).padStart(3, ' ') + 'KM/H', xr, y0 + pad, 'right');
 
-    // Speed.
-    if (!split && !touchUI) {
-      const mph = Math.round(Math.abs(car.speed) * 0.42);
-      text(ctx, String(mph).padStart(3, ' '), x0 + w / 2 + 20, y0 + h - pad - 26, 20, '#fff', 'right');
-      text(ctx, 'MPH', x0 + w / 2 + 26, y0 + h - pad - 18, 8, '#aaa');
-    }
+    const rightRows = this.practice ? this.drawPracticeTimes(ctx, car, vp, pad, touchUI) : this.drawRaceStatus(ctx, car, vp, pad, split, touchUI);
 
-    // Minimap.
-    const mw = split ? 120 : 170, mh = split ? 100 : 130;
-    const mx = x0 + w - mw - pad, my = touchUI ? y0 + 70 : y0 + h - mh - pad;
-    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(mx, my, mw, mh);
-    const mm = minimapImage(this.track, mw, mh);
+    // Minimap under the right-hand rows.
+    const mw = split ? 48 : 64, mh = split ? 36 : 48;
+    const mm = minimapPixel(this.track, mw, mh);
+    const mx = xr - mw, my = y0 + pad + rightRows * 11 + 3;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(mx, my, mw, mh);
     ctx.drawImage(mm.canvas, mx, my);
     for (const c of this.cars) {
       if (c.dead) continue;
-      const px = mx + mm.tf.ox + c.x * mm.tf.sc, py = my + mm.tf.oy + c.y * mm.tf.sc;
+      const px = Math.floor(mx + mm.tf.ox + c.x * mm.tf.sc), py = Math.floor(my + mm.tf.oy + c.y * mm.tf.sc);
       const me = c === car;
-      ctx.fillStyle = c.driver.color;
-      ctx.beginPath(); ctx.arc(px, py, me ? 5 : 3.5, 0, TAU); ctx.fill();
-      ctx.strokeStyle = me ? '#fff' : '#000'; ctx.lineWidth = me ? 2 : 1; ctx.stroke();
+      ctx.fillStyle = '#000'; ctx.fillRect(px - (me ? 2 : 1), py - (me ? 2 : 1), me ? 5 : 3, me ? 5 : 3);
+      ctx.fillStyle = me ? (Math.floor(this.t * 4) % 2 ? '#ffffff' : c.driver.color) : c.driver.color;
+      ctx.fillRect(px - (me ? 1 : 0), py - (me ? 1 : 0), me ? 3 : 1, me ? 3 : 1);
     }
 
-    // Center messages.
+    // Centre messages.
     const cx = x0 + w / 2;
+    const big = split ? 1 : 2;
     if (this.state === 'countdown') {
       const n = Math.ceil(this.countdown);
-      if (n <= 3 && n >= 1) {
-        const k = this.countdown - Math.floor(this.countdown);
-        text(ctx, String(n), cx, y0 + h * 0.3, Math.round(48 + k * 24), '#ffe066', 'center');
-      } else {
-        text(ctx, 'GET READY', cx, y0 + h * 0.3, 20, '#fff', 'center');
-      }
+      if (n >= 1 && n <= 3) pxText(ctx, String(n), cx, y0 + h * 0.26, split ? 4 : 6, pxStyle('#ffe066', '#401000'), 'center');
+      else pxText(ctx, 'GET READY', cx, y0 + h * 0.3, big, HUD_LABEL, 'center');
     } else if (this.time < 1) {
-      text(ctx, 'GO!', cx, y0 + h * 0.3, 56, '#7dff7a', 'center');
+      pxText(ctx, 'GO!', cx, y0 + h * 0.26, split ? 3 : 5, pxStyle('#7dff7a', '#003000'), 'center');
     }
-    const msgs = this.messages.filter(m => m.car === car);
-    msgs.forEach((m, i) => {
-      ctx.globalAlpha = Math.min(1, m.life * 2);
-      text(ctx, m.str, cx, y0 + h * 0.22 + i * 30, split ? 16 : 22, m.color, 'center');
+    this.messages.filter(m => m.car === car).forEach((m, i) => {
+      if (m.life < 0.4 && Math.floor(this.t * 12) % 2) return;
+      pxText(ctx, m.str, cx, y0 + h * 0.2 + i * 20, big, pxStyle(m.color), 'center');
     });
-    ctx.globalAlpha = 1;
-    if (car.wrongWayT > 1 && !car.finished && Math.floor(this.t * 3) % 2) {
-      text(ctx, 'WRONG WAY!', cx, y0 + h * 0.4, split ? 16 : 24, '#ff4040', 'center');
-    }
-    if (car.dead) text(ctx, 'RESPAWNING...', cx, y0 + h * 0.45, 12, '#fff', 'center');
-    if (car.frozenT > 0) text(ctx, 'FROZEN!', cx, y0 + h * 0.62, 12, '#bfefff', 'center');
-    if (car.stunT > 0) text(ctx, 'SHOCKED!', cx, y0 + h * 0.62, 12, '#8ff3ff', 'center');
+    if (car.wrongWayT > 1 && !car.finished && Math.floor(this.t * 3) % 2) pxText(ctx, 'WRONG WAY!', cx, y0 + h * 0.42, big, pxStyle('#ff4040'), 'center');
+    if (car.dead) pxText(ctx, 'RESPAWNING...', cx, y0 + h * 0.46, 1, HUD_VALUE, 'center');
+    if (car.frozenT > 0) pxText(ctx, 'FROZEN!', cx, y0 + h * 0.64, 1, pxStyle('#bfefff'), 'center');
+    if (car.stunT > 0) pxText(ctx, 'SHOCKED!', cx, y0 + h * 0.64, 1, pxStyle('#8ff3ff'), 'center');
     if (car.finished) {
-      text(ctx, ordinal(this.finishOrder.indexOf(car) + 1) + ' PLACE', cx, y0 + h * 0.4, split ? 18 : 26, car.place <= QUALIFY_PLACE ? '#7dff7a' : '#ff8a5a', 'center');
-      if (this.state !== 'finished') text(ctx, 'WAITING FOR OTHER PLAYER', cx, y0 + h * 0.4 + 36, 8, '#fff', 'center');
+      const place = this.finishOrder.indexOf(car) + 1;
+      pxText(ctx, ordinal(place) + ' PLACE', cx, y0 + h * 0.4, big, pxStyle(place <= QUALIFY_PLACE ? '#7dff7a' : '#ff8a5a'), 'center');
+      if (this.state !== 'finished') pxText(ctx, 'WAITING FOR OTHER PLAYER', cx, y0 + h * 0.4 + 22, 1, HUD_VALUE, 'center');
     }
   }
 
-  drawPracticeTimes(ctx, car, x0, y0, w, h, pad, touchUI) {
-    text(ctx, 'PRACTICE', x0 + pad, y0 + pad, 10, '#8ff3ff');
-    text(ctx, car.maxLap >= 1 ? 'LAP ' + car.maxLap : 'OUT LAP', x0 + pad, y0 + pad + 18, 22, '#ffe066');
-    const cur = car.maxLap >= 1 ? fmtTime(this.time - car.lapStart) : '--:--.--';
-    text(ctx, cur, x0 + pad, y0 + pad + 50, 16, '#fff');
-    const rows = [
-      ['LAST', car.lastLap, '#fff'],
-      ['BEST', car.bestLap, '#7dff7a'],
-      ['RECORD', this.record, '#ffe066'],
-    ];
-    rows.forEach(([label, v, col], i) => {
-      const y = y0 + pad + i * 20;
-      text(ctx, label, x0 + w - pad - 118, y + 2, 8, '#bbb');
-      text(ctx, v != null && isFinite(v) ? fmtTime(v) : '--:--.--', x0 + w - pad, y, 12, col, 'right');
-    });
-    if (!touchUI) text(ctx, 'ESC: MENU', x0 + pad, y0 + h - pad - 10, 8, '#bbb');
+  // Returns how many text rows it used on the right, so the minimap can sit below them.
+  drawPracticeTimes(ctx, car, vp, pad, touchUI) {
+    const x = vp.x + pad, xr = vp.x + vp.w - pad, y = vp.y + pad;
+    pxText(ctx, 'PRACTICE', x, y, 1, pxStyle('#8ff3ff', '#002030', true));
+    this.hudRow(ctx, 'LAP', car.maxLap >= 1 ? String(car.maxLap) : 'OUT', x, y + 11);
+    this.hudRow(ctx, 'TIME', car.maxLap >= 1 ? fmtTime(this.time - car.lapStart) : '--:--.--', x, y + 22);
+    const fmt = v => (v != null && isFinite(v) ? fmtTime(v) : '--:--.--');
+    this.hudRow(ctx, 'LAST', fmt(car.lastLap), xr, y + 11, 'right');
+    this.hudRow(ctx, 'BEST', fmt(car.bestLap), xr, y + 22, 'right', pxStyle('#7dff7a', '#002000'));
+    this.hudRow(ctx, 'RECORD', fmt(this.record), xr, y + 33, 'right', pxStyle('#ffe066', '#201000'));
+    if (!touchUI) pxText(ctx, 'ESC: MENU', x, vp.y + vp.h - pad - 7, 1, HUD_VALUE);
+    return 4;
   }
 
-  drawRaceStatus(ctx, car, x0, y0, w, h, pad, split, touchUI) {
-    // Position + lap.
-    const placeStr = ordinal(car.place);
-    const placeCol = car.place <= QUALIFY_PLACE ? '#ffe066' : '#ff8a5a';
-    text(ctx, placeStr, x0 + pad, y0 + pad, split ? 22 : 30, placeCol, 'left', '#000');
-    text(ctx, '/' + this.cars.length, x0 + pad + (split ? 22 : 30) * placeStr.length + 4, y0 + pad + (split ? 10 : 14), 12, '#fff');
-    const lapShown = clamp(car.lap, 1, this.laps);
-    text(ctx, 'LAP ' + lapShown + '/' + this.laps, x0 + pad, y0 + pad + (split ? 30 : 40), 12, '#fff');
+  drawRaceStatus(ctx, car, vp, pad, split, touchUI) {
+    const x = vp.x + pad, xr = vp.x + vp.w - pad, y = vp.y + pad;
+    this.hudRow(ctx, 'SCORE', fmtMoney(car.raceCash), x, y);
+    this.hudRow(ctx, 'TIME', fmtTime(this.time), x, y + 11);
 
-    // Time & cash.
-    text(ctx, fmtTime(this.time), x0 + w - pad, y0 + pad, 12, '#fff', 'right');
-    text(ctx, fmtMoney(car.raceCash), x0 + w - pad, y0 + pad + 20, 10, '#9fe39f', 'right');
-    if (isFinite(car.bestLap)) text(ctx, 'BEST ' + fmtTime(car.bestLap), x0 + w - pad, y0 + pad + 36, 8, '#bbb', 'right');
+    // Armor gauge.
+    const segs = 10, hpK = clamp(car.hp / car.maxHp, 0, 1), lit = Math.ceil(hpK * segs);
+    const gx = xr - segs * 4 + 1, gy = y + 11;
+    pxText(ctx, 'ARMOR', gx - 4, gy, 1, HUD_LABEL, 'right');
+    const hpCol = hpK > 0.5 ? '#3ad65a' : hpK > 0.25 ? '#f2c318' : (Math.floor(this.t * 6) % 2 ? '#ff3030' : '#801010');
+    for (let k = 0; k < segs; k++) {
+      ctx.fillStyle = '#101020'; ctx.fillRect(gx + k * 4 - 1, gy - 1, 5, 9);
+      ctx.fillStyle = k < lit ? hpCol : '#303048'; ctx.fillRect(gx + k * 4, gy, 3, 7);
+      if (k < lit) { ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillRect(gx + k * 4, gy, 3, 2); }
+    }
 
-    // Armor bar.
-    const bw = split ? 150 : 200, bx = x0 + pad, by = touchUI ? y0 + 110 : y0 + h - pad - 60;
-    text(ctx, 'ARMOR', bx, by - 14, 8, '#fff');
-    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 14);
-    const hpK = clamp(car.hp / car.maxHp, 0, 1);
-    ctx.fillStyle = hpK > 0.5 ? '#3ad65a' : hpK > 0.25 ? '#f2c318' : (Math.floor(this.t * 6) % 2 ? '#ff3030' : '#a01010');
-    ctx.fillRect(bx, by, bw * hpK, 10);
-    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(bx, by, bw * hpK, 3);
+    // Lap / rank block and weapon block (bottom corners, or stacked at the top on touch screens).
+    const ly = touchUI ? y + 26 : vp.y + vp.h - pad - 26;
+    this.hudRow(ctx, 'LAP', clamp(car.lap, 1, this.laps) + '/' + this.laps, x, ly);
+    pxText(ctx, 'RANK', x, ly + 13, 1, HUD_LABEL);
+    pxText(ctx, ordinal(car.place), x + pxWidth('RANK '), ly + 9, split ? 1 : 2, pxStyle(car.place <= QUALIFY_PLACE ? '#ffe066' : '#ff8a5a', '#200800'));
 
-    // Special + item boxes.
-    const iy = by + 18;
-    const box = (x, label, icon, count, dim) => {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x, iy, 36, 36);
-      ctx.strokeStyle = dim ? '#555' : '#ffe066'; ctx.lineWidth = 2; ctx.strokeRect(x, iy, 36, 36);
-      if (icon) { ctx.globalAlpha = dim ? 0.35 : 1; drawIcon(ctx, icon, x + 18, iy + 18, 24); ctx.globalAlpha = 1; }
-      if (count != null) text(ctx, 'x' + count, x + 40, iy + 22, 10, dim ? '#888' : '#fff');
-      text(ctx, label, x, iy - 10 + 48, 6, '#aaa');
-    };
-    box(bx, 'SPECIAL', car.driver.special, car.ammo, car.ammo <= 0);
-    box(bx + (split ? 80 : 90), 'ITEM', car.item, null, !car.item);
+    const wx = touchUI ? x : xr, align = touchUI ? 'left' : 'right';
+    const wy = touchUI ? ly + 30 : vp.y + vp.h - pad - 8;
+    const wname = WEAPONS[car.driver.special].name;
+    const pipW = car.ammo * 3;
+    if (align === 'right') {
+      for (let k = 0; k < car.ammo; k++) { ctx.fillStyle = '#101020'; ctx.fillRect(xr - pipW + k * 3 - 1, wy - 1, 4, 9); ctx.fillStyle = '#e83020'; ctx.fillRect(xr - pipW + k * 3, wy, 2, 7); }
+      pxText(ctx, wname, xr - pipW - (car.ammo ? 4 : 0), wy, 1, car.ammo ? HUD_LABEL : pxStyle('#707070'), 'right');
+    } else {
+      pxText(ctx, wname, x, wy, 1, car.ammo ? HUD_LABEL : pxStyle('#707070'));
+      const px0 = x + pxWidth(wname) + 4;
+      for (let k = 0; k < car.ammo; k++) { ctx.fillStyle = '#101020'; ctx.fillRect(px0 + k * 3 - 1, wy - 1, 4, 9); ctx.fillStyle = '#e83020'; ctx.fillRect(px0 + k * 3, wy, 2, 7); }
+    }
+    if (car.item) {
+      const it = '+' + WEAPONS[car.item].name;
+      const iy = wy - 11;
+      pxText(ctx, it, wx, iy, 1, pxStyle(Math.floor(this.t * 3) % 2 ? '#8ff3ff' : '#ffffff', '#002030'), align);
+      drawIcon(ctx, car.item, align === 'right' ? wx - pxWidth(it) - 12 : wx + pxWidth(it) + 12, iy + 3, 12);
+    }
+    return 2;
   }
 }

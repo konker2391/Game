@@ -113,23 +113,16 @@ function drawHeading(ctx, str, y = 28, color = PAL.gold) {
   ctx.fillStyle = color; ctx.fillRect(VIEW_W / 2 - 180, y + 32, 360, 3);
 }
 
+const LOGO_TOP = pxStyle(['#fffbd0', '#fff070', '#ffd23f', '#ffa020', '#ff7a1a', '#e84a1a', '#b82810'], '#3a0a00', true);
+const LOGO_SUB = pxStyle(['#f0ffff', '#c0f8ff', '#5ee8ff', '#38c0f0', '#2098e0', '#1a70c0', '#104c90'], '#001830', true);
+const LOGO_SHADOW = pxStyle('rgb(0,0,0)', 'rgb(0,0,0)', true);
+
 function drawLogo(ctx, cx, y, t) {
-  ctx.save();
-  ctx.font = font(64); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  const wob = Math.sin(t * 2) * 2;
-  ctx.fillStyle = '#000'; ctx.fillText('COMBAT', cx + 6, y + 6 + wob);
-  ctx.lineWidth = 10; ctx.strokeStyle = '#3a0a00'; ctx.lineJoin = 'round';
-  ctx.strokeText('COMBAT', cx, y + wob);
-  const g = ctx.createLinearGradient(0, y, 0, y + 64);
-  g.addColorStop(0, '#fff6a0'); g.addColorStop(0.45, PAL.gold); g.addColorStop(0.55, PAL.orange); g.addColorStop(1, PAL.red);
-  ctx.fillStyle = g; ctx.fillText('COMBAT', cx, y + wob);
-  ctx.font = font(34);
-  ctx.fillStyle = '#000'; ctx.fillText('CIRCUIT', cx + 4, y + 84);
-  ctx.lineWidth = 6; ctx.strokeStyle = '#002a3a'; ctx.strokeText('CIRCUIT', cx, y + 80);
-  const g2 = ctx.createLinearGradient(0, y + 80, 0, y + 114);
-  g2.addColorStop(0, '#e0ffff'); g2.addColorStop(0.5, PAL.cyan); g2.addColorStop(1, '#1a7fd0');
-  ctx.fillStyle = g2; ctx.fillText('CIRCUIT', cx, y + 80);
-  ctx.restore();
+  const wob = Math.round(Math.sin(t * 2) * 2);
+  pxText(ctx, 'COMBAT', cx + 6, y + 6 + wob, 9, LOGO_SHADOW, 'center');
+  pxText(ctx, 'COMBAT', cx, y + wob, 9, LOGO_TOP, 'center');
+  pxText(ctx, 'CIRCUIT', cx + 4, y + 84, 5, LOGO_SHADOW, 'center');
+  pxText(ctx, 'CIRCUIT', cx, y + 80, 5, LOGO_SUB, 'center');
 }
 
 function statBar(ctx, label, v, x, y, w, color = PAL.gold) {
@@ -142,12 +135,11 @@ function statBar(ctx, label, v, x, y, w, color = PAL.gold) {
 }
 
 function wrapText(ctx, str, x, y, maxW, size, color, lineH = size + 6) {
-  ctx.font = font(size);
   const words = str.split(' ');
   let line = '';
   for (const w of words) {
     const test = line ? line + ' ' + w : w;
-    if (ctx.measureText(test).width > maxW && line) {
+    if (textWidth(test, size) > maxW && line) {
       text(ctx, line, x, y, size, color);
       y += lineH; line = w;
     } else line = test;
