@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Combat Circuit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="wrap">
+  <canvas id="game" width="960" height="540" aria-label="Combat Circuit game screen"></canvas>
+  <div id="touch" hidden>
+    <div class="tgroup tleft">
+      <button type="button" data-k="left" aria-label="Steer left">&#9664;</button>
+      <button type="button" data-k="right" aria-label="Steer right">&#9654;</button>
+    </div>
+    <div class="tgroup tright">
+      <button type="button" data-k="item" aria-label="Use item">ITEM</button>
+      <button type="button" data-k="special" aria-label="Fire special">FIRE</button>
+      <button type="button" data-k="brake" aria-label="Brake">BRK</button>
+      <button type="button" data-k="gas" class="gas" aria-label="Accelerate">GAS</button>
+    </div>
+    <button type="button" id="tpause" data-k="pause" aria-label="Pause">II</button>
+  </div>
+</main>
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/input.js"></script>
+<script src="js/track.js"></script>
+<script src="js/car.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/render.js"></script>
+<script src="js/race.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

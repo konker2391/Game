@@ -1,0 +1,75 @@
+:root {
+  --bg: #05060f;
+  --btn: rgba(20, 24, 60, 0.55);
+  --btn-on: rgba(255, 210, 63, 0.55);
+  --btn-edge: rgba(255, 255, 255, 0.35);
+  --fg: #f4f4f4;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+[hidden] { display: none !important; }
+#wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+#game {
+  display: block;
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: auto;
+  aspect-ratio: 16 / 9;
+  max-width: 100%;
+  max-height: 100vh;
+  background: #000;
+  outline: none;
+}
+#touch {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.tgroup {
+  position: absolute;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
+}
+.tleft { left: 16px; }
+.tright { right: 16px; flex-wrap: wrap-reverse; justify-content: flex-end; max-width: 190px; }
+#touch button {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 2px solid var(--btn-edge);
+  background: var(--btn);
+  opacity: 0.8;
+  color: var(--fg);
+  font: 10px "Press Start 2P", "Courier New", monospace;
+  pointer-events: auto;
+  touch-action: none;
+}
+#touch .tleft button { font-size: 20px; }
+#touch .tright button { width: 64px; height: 64px; }
+#touch .tright .gas { width: 84px; height: 84px; }
+#touch button.on { background: var(--btn-on); }
+#tpause {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px !important;
+  height: 44px !important;
+}
