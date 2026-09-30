@@ -91,5 +91,6 @@ blocks controller access, the game keeps running on keyboard and touch, and the 
 | `js/input.js` | Keyboard, gamepad, touch and pointer input |
 | `js/main.js` | Championship flow, main loop, canvas scaling |
 
-To add a track, append an entry to `TRACKS` in `js/data.js` with a closed loop of control points. Keep parts
-of the loop that are not next to each other at least ~300px apart, and keep corners gentle so the road does not fold.
+To add a track, append an entry to `TRACKS` in `js/data.js` with a closed loop of control points. Roads are
+230px wide with barriers 160px either side of the centre line. Keep parts of the loop that are not next to each
+other at least ~400px apart, and keep corner radii above ~120px so the inside edge does not pinch.

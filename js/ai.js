@@ -4,13 +4,13 @@
 function aiControl(car, race, dt) {
   const tr = race.track, L = tr.length;
   const ai = car.ai || (car.ai = {
-    lane: rand(-35, 35), laneT: rand(1, 4), stuckT: 0, reverseT: 0,
+    lane: rand(-0.4, 0.4) * race.track.halfW, laneT: rand(1, 4), stuckT: 0, reverseT: 0,
     fireT: rand(1.5, 3.5), itemT: rand(1, 3), aggression: rand(0.7, 1.3),
   });
   const spd = Math.hypot(car.vx, car.vy);
 
   ai.laneT -= dt;
-  if (ai.laneT <= 0) { ai.lane = rand(-42, 42); ai.laneT = rand(2, 5); }
+  if (ai.laneT <= 0) { ai.lane = rand(-0.5, 0.5) * tr.halfW; ai.laneT = rand(2, 5); }
   let lane = ai.lane;
 
   // Grab crates ahead when empty-handed.

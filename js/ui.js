@@ -403,7 +403,7 @@ class TrackSelectScreen {
     text(ctx, 'SURFACE', 596, 214, 8, PAL.grey);
     text(ctx, tr.theme.grip < 0.8 ? 'ICY' : tr.theme.offDamage ? 'HOT ASH' : 'NORMAL', 596, 228, 10, tr.theme.grip < 0.8 ? PAL.cyan : tr.theme.offDamage ? PAL.orange : PAL.white);
     if (this.practice) {
-      const rec = loadJSON('cc_record_' + tr.name, null);
+      const rec = loadJSON('cc_record2_' + tr.name, null);
       text(ctx, 'LAP RECORD', 596, 256, 8, PAL.grey);
       text(ctx, rec != null ? fmtTime(rec) : 'NONE YET', 596, 270, 10, PAL.gold);
     }

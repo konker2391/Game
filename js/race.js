@@ -9,7 +9,8 @@ class Race {
     this.laps = opts.laps || this.track.laps;
     this.attract = !!opts.attract;
     this.practice = !!opts.practice;
-    this.recordKey = 'cc_record_' + this.track.name;
+    // v2: records reset when the tracks were widened.
+    this.recordKey = 'cc_record2_' + this.track.name;
     this.record = this.practice ? loadJSON(this.recordKey, null) : null;
     this.cars = [];
     this.humans = [];
@@ -19,6 +20,9 @@ class Race {
     this.rings = [];
     this.texts = [];
     this.finishOrder = [];
+    this.skidPts = new Float32Array(2 * 14000);
+    this.skidHead = 0;
+    this.skidCount = 0;
     this.time = 0;
     this.t = 0;
     this.state = this.attract || this.practice ? 'racing' : 'countdown';
@@ -194,16 +198,15 @@ class Race {
     if (c.vx * tx + c.vy * ty < -60) c.wrongWayT += dt; else c.wrongWayT = 0;
   }
 
-  // Skid marks are stamped straight into the baked track bitmap, so they persist for free.
+  // Skid marks are a ring buffer of world-space dots, drawn as single pixels.
   addSkid(a, b) {
-    const bk = this.bake;
-    if (!bk) return;
-    const Z = bk.Z;
-    const ax = a.x * Z - bk.ox, ay = a.y * Z - bk.oy, bx = b.x * Z - bk.ox, by = b.y * Z - bk.oy;
-    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay)));
-    bk.ctx.fillStyle = 'rgba(16,14,14,0.2)';
+    const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 1.2));
+    const pts = this.skidPts, cap = pts.length / 2;
     for (let k = 1; k <= steps; k++) {
-      bk.ctx.fillRect(Math.round(ax + (bx - ax) * k / steps), Math.round(ay + (by - ay) * k / steps), 1, 1);
+      pts[this.skidHead * 2] = a.x + (b.x - a.x) * k / steps;
+      pts[this.skidHead * 2 + 1] = a.y + (b.y - a.y) * k / steps;
+      this.skidHead = (this.skidHead + 1) % cap;
+      if (this.skidCount < cap) this.skidCount++;
     }
   }
 
@@ -674,7 +677,9 @@ class Race {
   updateCameras(dt) {
     for (const cam of this.cams) {
       const c = cam.target;
-      const tx = c.x + c.vx * 0.38, ty = c.y + c.vy * 0.38;
+      // Lead the camera in the direction of travel, but keep the car well inside the view.
+      const hw = cam.halfW || 300, hh = cam.halfH || 170;
+      const tx = c.x + clamp(c.vx * 0.42, -hw * 0.55, hw * 0.55), ty = c.y + clamp(c.vy * 0.42, -hh * 0.55, hh * 0.55);
       const k = 1 - Math.exp(-6 * dt);
       cam.x += (tx - cam.x) * k;
       cam.y += (ty - cam.y) * k;
@@ -697,8 +702,17 @@ class Race {
     const lr = LowRes.get(), lc = lr.ctx;
     const W = lr.canvas.width, H = lr.canvas.height;
     const n = this.cams.length;
-    const Z = n > 1 ? 0.45 : 0.6;
-    if (!this.bake || this.bake.Z !== Z) this.bake = bakeTrackCached(this.track, Z);
+    const Z = n > 1 ? 0.6 : 0.8;
+    if (!this.bake || this.bake.Z !== Z) {
+      // Baking takes a moment: show a loading frame first, bake on the next one.
+      if (!this.loadingShown) {
+        this.loadingShown = true;
+        ctx.fillStyle = '#05060f'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+        text(ctx, 'LOADING ' + this.track.name, VIEW_W / 2, VIEW_H / 2 - 7, 14, '#ffd23f', 'center');
+        return;
+      }
+      this.bake = bakeTrackCached(this.track, Z);
+    }
     const vps = n > 1
       ? [{ x: 0, y: 0, w: W / 2 - 1, h: H }, { x: W / 2 + 1, y: 0, w: W / 2 - 1, h: H }]
       : [{ x: 0, y: 0, w: W, h: H }];
@@ -720,6 +734,7 @@ class Race {
     const cx = Math.round(cam.x * Z) + shx, cy = Math.round(cam.y * Z) + shy;
     ctx.translate(vp.x + Math.floor(vp.w / 2) - cx, vp.y + Math.floor(vp.h / 2) - cy);
     const x0 = cx - vp.w / 2 - 2, y0 = cy - vp.h / 2 - 2, x1 = cx + vp.w / 2 + 2, y1 = cy + vp.h / 2 + 2;
+    cam.halfW = vp.w / 2 / Z; cam.halfH = vp.h / 2 / Z;
 
     // Ground beyond the baked bitmap, then the visible part of the baked course.
     if (x0 < bk.ox || y0 < bk.oy || x1 > bk.ox + bk.W || y1 > bk.oy + bk.H) {
@@ -740,6 +755,14 @@ class Race {
       ctx.fillStyle = col;
       ctx.fillRect(Math.round(x * Z - size / 2), Math.round(y * Z - size / 2), size, size);
     };
+
+    // Skid marks.
+    ctx.fillStyle = 'rgba(16,14,14,0.32)';
+    const sp = this.skidPts;
+    for (let i = 0; i < this.skidCount; i++) {
+      const X = sp[i * 2] * Z, Y = sp[i * 2 + 1] * Z;
+      if (X > x0 && X < x1 && Y > y0 && Y < y1) ctx.fillRect(Math.round(X), Math.round(Y), 1, 1);
+    }
 
     // Hazards.
     for (const h of this.hazards) {

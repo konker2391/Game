@@ -481,7 +481,7 @@ function groundTile(track) {
 function bakeTrack(track, Z) {
   const t0 = performance.now();
   const th = track.theme;
-  const b = track.bounds, pad = 420;
+  const b = track.bounds, pad = 320;
   const ox = Math.floor((b.minX - pad) * Z), oy = Math.floor((b.minY - pad) * Z);
   const W = Math.ceil((b.maxX + pad) * Z) - ox, H = Math.ceil((b.maxY + pad) * Z) - oy;
   const tile = groundTile(track);
@@ -493,6 +493,7 @@ function bakeTrack(track, Z) {
   dctx.setTransform(Z, 0, 0, Z, -ox, -oy);
   for (const d of track.decor) drawDecor(dctx, d, th, 0.3);
   const dec = dctx.getImageData(0, 0, W, H).data;
+  dc.width = dc.height = 0;   // release the scratch canvas early
 
   // Mask of pixels close enough to the track to need a road lookup.
   const mc = document.createElement('canvas');
@@ -503,6 +504,7 @@ function bakeTrack(track, Z) {
   mctx.lineWidth = 2 * limit + 4; mctx.lineJoin = 'round'; mctx.strokeStyle = '#fff';
   mctx.stroke(track.path);
   const mask = mctx.getImageData(0, 0, W, H).data;
+  mc.width = mc.height = 0;
 
   const N = track.n, px = track.px, py = track.py, L = track.length, sp = track.spacing;
   const halfW = track.halfW, wallOff = track.wallOff;
@@ -524,7 +526,7 @@ function bakeTrack(track, Z) {
   const gridSlots = [];
   for (let k = 0; k < 8; k++) {
     const row = Math.floor(k / 2), c = k % 2;
-    gridSlots.push({ s: L - 70 - row * 70 - c * 30, lat: c ? 34 : -34 });
+    gridSlots.push({ s: L - 70 - row * 70 - c * 30, lat: c ? track.gridLat : -track.gridLat });
   }
 
   const img = new ImageData(W, H);
@@ -656,18 +658,13 @@ function bakeTrack(track, Z) {
   return { canvas, ctx, ox, oy, W, H, Z, tile: tile.canvas, pattern: null, ms: performance.now() - t0 };
 }
 
-// The last clean bake is kept so restarting the same track is instant; each race
-// gets its own copy because skid marks are stamped into it.
+// The last bake is kept so restarting the same track is instant. Bakes are never
+// drawn into after creation, so races can share one.
 let _bakeCache = null;
 function bakeTrackCached(track, Z) {
   const key = track.name + '@' + Z;
   if (!_bakeCache || _bakeCache.key !== key) _bakeCache = { key, bake: bakeTrack(track, Z) };
-  const src = _bakeCache.bake;
-  const canvas = document.createElement('canvas');
-  canvas.width = src.W; canvas.height = src.H;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(src.canvas, 0, 0);
-  return Object.assign({}, src, { canvas, ctx, pattern: null });
+  return _bakeCache.bake;
 }
 
 // Tiny pixel minimap for the race HUD.

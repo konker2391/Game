@@ -23,8 +23,9 @@ class Track {
     this.name = def.name;
     this.theme = THEMES[def.theme];
     this.laps = def.laps || 3;
-    this.halfW = def.halfW || 80;
+    this.halfW = def.halfW || 115;
     this.wallOff = this.halfW + 45;
+    this.gridLat = Math.round(this.halfW * 0.42);   // grid columns sit either side of centre
     this._buildCenterline(def.points);
     this._buildTurnAhead();
     this._buildPath();
@@ -174,7 +175,7 @@ class Track {
   gridSlot(k) {
     const row = Math.floor(k / 2), col = k % 2;
     const s = this.length - 70 - row * 70 - col * 30;
-    const lat = col ? 34 : -34;
+    const lat = col ? this.gridLat : -this.gridLat;
     return this.pointAt(s, lat);
   }
 
@@ -182,7 +183,7 @@ class Track {
     this.pickupSpots = [];
     for (const f of [0.18, 0.42, 0.66, 0.88]) {
       const s = this.length * f;
-      for (const lat of [-44, 0, 44]) {
+      for (const lat of [-0.55 * this.halfW, 0, 0.55 * this.halfW]) {
         const p = this.pointAt(s, lat);
         this.pickupSpots.push({ x: p.x, y: p.y, s, lat });
       }
@@ -202,15 +203,15 @@ class Track {
       const s = candidates[Math.floor(rng() * candidates.length)];
       if (this.boosts.some(b => Math.abs(b.s - s) < 900)) continue;
       if (this.pickupSpots.some(p => Math.abs(p.s - s) < 150)) continue;
-      const lat = (rng() - 0.5) * 70;
+      const lat = (rng() - 0.5) * this.halfW;
       const p = this.pointAt(s, lat);
-      this.boosts.push({ x: p.x, y: p.y, s, lat, angle: p.angle, len: 56, wid: 40 });
+      this.boosts.push({ x: p.x, y: p.y, s, lat, angle: p.angle, len: 56, wid: 48 });
     }
   }
 
   _buildDecor(rng) {
     this.decor = [];
-    const b = this.bounds, pad = 380;
+    const b = this.bounds, pad = 300;
     const area = (b.maxX - b.minX + pad * 2) * (b.maxY - b.minY + pad * 2);
     const want = Math.floor(area / 26000);
     for (let tries = 0; this.decor.length < want && tries < want * 6; tries++) {
