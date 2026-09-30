@@ -185,7 +185,12 @@ class TitleScreen {
     ctx.fillStyle = 'rgba(8,8,30,0.62)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     drawLogo(ctx, VIEW_W / 2, 40, this.t);
     this.menu.draw(ctx);
-    text(ctx, 'ARROWS/WASD + ENTER  ·  CLICK OR TAP  ·  GAMEPAD', VIEW_W / 2, VIEW_H - 26, 8, PAL.grey, 'center');
+    const hint = Input.padCount
+      ? Input.padCount + (Input.padCount > 1 ? ' CONTROLLERS' : ' CONTROLLER') + ' READY  ·  D-PAD + A TO SELECT'
+      : Input.padsBlocked
+        ? 'ARROWS/WASD + ENTER  ·  CLICK OR TAP  ·  CONTROLLERS ARE BLOCKED IN THIS VIEW'
+        : 'ARROWS/WASD + ENTER  ·  CLICK OR TAP  ·  CONTROLLER: PRESS ANY BUTTON';
+    text(ctx, hint, VIEW_W / 2, VIEW_H - 26, 8, Input.padCount ? PAL.green : PAL.grey, 'center');
   }
 }
 
@@ -232,7 +237,7 @@ class HelpScreen {
     rows.forEach((r, i) => {
       r.forEach((c, j) => text(ctx, c, 46 + [0, 90, 220, 320][j], 112 + i * 22, 8, i === 0 ? PAL.gold : j === 0 ? PAL.grey : PAL.white));
     });
-    wrapText(ctx, 'GAMEPAD: stick/d-pad steer, A gas, B brake, X special, Y item. TOUCH: on-screen buttons.', 46, 232, 400, 8, PAL.grey, 16);
+    wrapText(ctx, 'CONTROLLER (USB or Bluetooth): pair it with your device, then press any button. Stick/d-pad steer, A or RT gas, B or LT brake, X or RB special, Y or LB item, Start pause. TOUCH: on-screen buttons.', 46, 226, 400, 8, PAL.grey, 13);
     text(ctx, 'M = mute   ·   Boost pads: drive over the arrows', 46, 292, 7, PAL.grey);
 
     drawPanel(ctx, 480, 70, 450, 250);

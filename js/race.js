@@ -639,6 +639,7 @@ class Race {
   floatText(x, y, str, color) { this.texts.push({ x, y, str, color, life: 1.3 }); }
   message(car, str, color, dur = 1.8) { this.messages.push({ car, str, color, life: dur, max: dur }); }
   shake(car, amt) {
+    if (car.human && !this.attract) Input.rumble(car.slot, amt / 12, 90 + amt * 12);
     const cam = this.cams.find(c => c.target === car);
     if (cam) cam.shake = Math.max(cam.shake, amt);
   }

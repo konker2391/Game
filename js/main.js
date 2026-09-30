@@ -128,24 +128,50 @@ const Game = {
     if (screen instanceof TitleScreen) Champ.active = false;
     this.screen = screen;
     if (screen.enter) screen.enter();
+    this.updateTouchUI();
+  },
+
+  // On-screen buttons show during races on touch screens, unless a controller is connected.
+  updateTouchUI() {
+    const want = !!(this.screen && this.screen.isRace) && Input.padCount === 0 && window.matchMedia('(pointer: coarse)').matches;
+    if (want === this.touchUI && this._touchInit) return;
+    this._touchInit = true;
+    this.touchUI = want;
     const touch = document.getElementById('touch');
-    this.touchUI = !!screen.isRace && window.matchMedia('(pointer: coarse)').matches;
-    if (touch) touch.hidden = !this.touchUI;
+    if (touch) touch.hidden = !want;
   },
 
   frame(ts) {
     const dt = Math.min(0.05, (ts - (this.last || ts)) / 1000);
     this.last = ts;
     Input.poll();
+    this.updateTouchUI();
     const screen = this.screen;
     screen.update(dt);
     const ctx = this.ctx;
     ctx.setTransform(this.res, 0, 0, this.res, 0, 0);
     ctx.imageSmoothingEnabled = true;
     this.screen.draw(ctx);
+    this.drawToasts(ctx, dt);
     Input.endFrame();
     requestAnimationFrame(t => this.frame(t));
   },
+};
+
+Game.drawToasts = function (ctx, dt) {
+  const list = Input.toasts;
+  for (let i = list.length - 1; i >= 0; i--) {
+    list[i].life -= dt;
+    if (list[i].life <= 0) list.splice(i, 1);
+  }
+  list.forEach((t, i) => {
+    const w = textWidth(t.msg, 14) + 24, x = VIEW_W / 2 - w / 2, y = VIEW_H - 64 - i * 30;
+    ctx.globalAlpha = Math.min(1, t.life * 2);
+    ctx.fillStyle = 'rgba(8,10,30,0.88)'; ctx.fillRect(x, y, w, 26);
+    ctx.fillStyle = '#ffd23f'; ctx.fillRect(x, y, w, 2); ctx.fillRect(x, y + 24, w, 2);
+    text(ctx, t.msg, VIEW_W / 2, y + 6, 14, '#ffd23f', 'center');
+    ctx.globalAlpha = 1;
+  });
 };
 
 window.addEventListener('load', () => Game.init());

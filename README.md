@@ -53,13 +53,27 @@ python3 -m http.server 8000
 
 | Action | 1 player | Player 1 (2P) | Player 2 (2P) | Gamepad |
 |---|---|---|---|---|
-| Steer / gas / brake | Arrows or WASD | W A S D | Arrows | Stick or d-pad, A gas, B brake |
+| Steer / gas / brake | Arrows or WASD | W A S D | Arrows | Stick or d-pad, A or RT gas, B or LT brake |
 | Special weapon | Z / Space / J | F | `.` or Numpad 0 | X or RB |
 | Use item | X / K | G | `/` or Numpad . | Y or LB |
 | Pause | Esc / P | Esc / P | Esc / P | Start |
 
 Menus work with the arrow keys and Enter, a mouse, touch or a gamepad. On touch screens, on-screen buttons
-appear during races.
+appear during races. They hide automatically when a controller is connected.
+
+### Controllers (USB or Bluetooth)
+
+Controllers use the browser's Gamepad API, so a Bluetooth pad works like a wired one. Xbox, PlayStation,
+Switch Pro, 8BitDo and most generic pads are supported.
+
+1. Pair the controller with your computer, phone or tablet in the system Bluetooth settings.
+2. Open the game and **press any button** on the controller. Browsers hide controllers until one is pressed.
+   A "Controller 1 connected" banner confirms it.
+3. The first controller drives Player 1 and the second drives Player 2 in split screen.
+
+The right trigger is an analog throttle. Controllers that support it rumble on crashes and hits. Pads that
+report a non-standard layout, with the d-pad as a hat switch, are handled too. If a page embedding the game
+blocks controller access, the game keeps running on keyboard and touch, and the title screen says so.
 
 ## Code layout
 
