@@ -46,7 +46,9 @@ python3 -m http.server 8000
 - **Practice**: drive any track alone to learn it. There are no rivals, crates, weapons or damage. Laps are unlimited
   and timed, with last, best and saved record lap times for each track.
 - The AI takes racing lines, hunts crates, dodges hazards and fires back.
-- Chiptune soundtrack and synthesized sound effects. Press `M` to mute.
+- Original 90s arcade-fighter-style techno soundtrack: four-on-the-floor kicks, pumping saw bass,
+  supersaw stabs, orchestra hits and risers, arranged in build / drop / breakdown sections. There are
+  separate menu, race and victory themes, all synthesized live. Press `M` to mute.
 - Keyboard, gamepad and touch controls.
 
 ## Controls
@@ -87,7 +89,8 @@ blocks controller access, the game keeps running on keyboard and touch, and the 
 | `js/pixel.js` | Pixel-art rendering: bitmap font, car and item sprites, dithered ground tiles, track texture baking |
 | `js/render.js` | Vector source art for scenery and icons (pixelized by `pixel.js`), menu car previews, minimap |
 | `js/ui.js` | Menus and screens |
-| `js/audio.js` | Web Audio sound effects and music sequencer |
+| `js/audio.js` | Web Audio sound effects, engine sounds and the music scheduler |
+| `js/music.js` | Techno songs (chords, patterns, section arrangement) and their synthesizer |
 | `js/input.js` | Keyboard, gamepad, touch and pointer input |
 | `js/main.js` | Championship flow, main loop, canvas scaling |
 

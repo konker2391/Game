@@ -1,6 +1,8 @@
 'use strict';
 // Procedural sound effects and a chiptune soundtrack via Web Audio.
 
+const MUSIC_VOL = 0.65;
+
 const SFX = {
   ctx: null, master: null, sfxGain: null, musicGain: null, noiseBuf: null,
   muted: loadJSON('cc_muted', false),
@@ -17,7 +19,7 @@ const SFX = {
       this.master.gain.value = this.muted ? 0 : 0.55;
       this.master.connect(this.ctx.destination);
       this.sfxGain = this.ctx.createGain(); this.sfxGain.gain.value = 0.8; this.sfxGain.connect(this.master);
-      this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = this.musicOn ? 0.22 : 0; this.musicGain.connect(this.master);
+      this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = this.musicOn ? MUSIC_VOL : 0; this.musicGain.connect(this.master);
       const len = this.ctx.sampleRate;
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = this.noiseBuf.getChannelData(0);
@@ -36,7 +38,7 @@ const SFX = {
   toggleMusic() {
     this.musicOn = !this.musicOn;
     saveJSON('cc_music', this.musicOn);
-    if (this.musicGain) this.musicGain.gain.value = this.musicOn ? 0.22 : 0;
+    if (this.musicGain) this.musicGain.gain.value = this.musicOn ? MUSIC_VOL : 0;
   },
 
   tone(freq, dur, o = {}) {
@@ -138,30 +140,14 @@ const SFX = {
     for (let i = 0; i < this.engines.length; i++) this.engine(i, false, 0);
   },
 
-  // --- Music -------------------------------------------------------------
-  SONGS: {
-    menu: {
-      bpm: 118,
-      chords: [[57, 'm'], [53, 'M'], [48, 'M'], [55, 'M']],
-      lead: [12, -1, 15, -1, 19, -1, 15, 12, 17, -1, 15, -1, 12, -1, 10, -1],
-    },
-    race: {
-      bpm: 152,
-      chords: [[52, 'm'], [52, 'm'], [48, 'M'], [50, 'M'], [45, 'm'], [45, 'm'], [47, 'M'], [47, 'M']],
-      lead: [12, 12, -1, 19, -1, 17, 15, -1, 12, -1, 15, 17, 19, -1, 22, 19],
-    },
-    win: {
-      bpm: 132,
-      chords: [[48, 'M'], [53, 'M'], [55, 'M'], [48, 'M']],
-      lead: [12, 16, 19, 24, -1, 19, 24, -1, 16, 19, 24, 28, -1, 24, -1, -1],
-    },
-  },
-
+  // --- Music (see music.js) -----------------------------------------------
   playSong(name) {
     if (!this.ctx) { this.pendingSong = name; return; }
     this.pendingSong = null;
-    if (this.song === this.SONGS[name]) return;
-    this.song = this.SONGS[name];
+    if (!this.music) this.music = new MusicEngine(this.ctx, this.musicGain);
+    if (this.song === SONGS[name]) return;
+    this.song = SONGS[name];
+    this.music.setSong(this.song);
     this.songStep = 0;
     this.nextNoteTime = this.ctx.currentTime + 0.1;
     if (!this.timer) this.timer = setInterval(() => this._schedule(), 25);
@@ -173,52 +159,13 @@ const SFX = {
 
   _schedule() {
     if (!this.song || !this.ctx) return;
-    const stepDur = 60 / this.song.bpm / 4;
+    const stepDur = this.music.stepDur();
+    // After a stall (tab in background), skip ahead instead of firing a burst of notes.
+    if (this.nextNoteTime < this.ctx.currentTime - 0.2) this.nextNoteTime = this.ctx.currentTime + 0.05;
     while (this.nextNoteTime < this.ctx.currentTime + 0.12) {
-      this._note(this.songStep, this.nextNoteTime, stepDur);
+      this.music.step(this.songStep, this.nextNoteTime);
       this.nextNoteTime += stepDur;
       this.songStep++;
     }
-  },
-
-  _note(step, t, dur) {
-    const s = this.song, ctx = this.ctx, out = this.musicGain;
-    const bar = Math.floor(step / 16) % s.chords.length;
-    const k = step % 16;
-    const [root, quality] = s.chords[bar];
-    const mf = m => 440 * Math.pow(2, (m - 69) / 12);
-    const voice = (freq, len, type, vol) => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = type; o.frequency.value = freq;
-      g.gain.setValueAtTime(vol, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + len);
-      o.connect(g); g.connect(out); o.start(t); o.stop(t + len + 0.02);
-    };
-    const drum = (len, freq, vol, type) => {
-      const src = ctx.createBufferSource(); src.buffer = this.noiseBuf;
-      const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
-      src.connect(f); f.connect(g); g.connect(out); src.start(t, Math.random() * 0.5); src.stop(t + len + 0.02);
-    };
-    // Bass: driving eighths with octave pops.
-    const bassPat = [0, -1, 0, 12, 0, -1, 0, 12, 0, -1, 0, 12, 0, 7, 12, 7];
-    if (bassPat[k] >= 0) voice(mf(root - 12 + bassPat[k]), dur * 0.9, 'triangle', 0.5);
-    // Arp chord.
-    const third = quality === 'm' ? 3 : 4;
-    const arp = [0, third, 7, 12];
-    if (k % 2 === 1) voice(mf(root + 12 + arp[(k >> 1) % 4]), dur * 0.8, 'square', 0.06);
-    // Lead: shifted along with the chord.
-    const n = s.lead[k];
-    if (n >= 0 && bar % 2 === 1) voice(mf(root + n), dur * 1.6, 'square', 0.09);
-    // Drums.
-    if (k === 0 || k === 8 || k === 10) {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
-      g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
-      o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.16);
-    }
-    if (k === 4 || k === 12) drum(0.15, 1800, 0.35, 'bandpass');
-    if (k % 2 === 0) drum(0.04, 7000, 0.12, 'highpass');
   },
 };
