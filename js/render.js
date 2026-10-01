@@ -1,22 +1,23 @@
 'use strict';
 // Procedural sprites: cars, weapon icons, scenery, track and minimap.
 
+// Physical length and width of each body type (world units), shared with the race code.
 const BODY = {
-  jeep:   { len: 36, wid: 22, cab: [0.05, 0.45], wheel: [10, 6], r: 4 },
-  hotrod: { len: 38, wid: 18, cab: [0.0, 0.35], wheel: [11, 6], r: 5 },
-  coupe:  { len: 38, wid: 20, cab: [0.2, 0.62], wheel: [9, 5], r: 8 },
-  pickup: { len: 40, wid: 22, cab: [0.42, 0.7], wheel: [10, 6], r: 4 },
-  rally:  { len: 34, wid: 20, cab: [0.2, 0.65], wheel: [9, 5], r: 6 },
-  muscle: { len: 40, wid: 21, cab: [0.18, 0.55], wheel: [10, 6], r: 5 },
-  sled:   { len: 38, wid: 18, cab: [0.25, 0.58], wheel: [9, 5], r: 9 },
-  truck:  { len: 38, wid: 24, cab: [0.3, 0.68], wheel: [14, 9], r: 4 },
+  jeep: { len: 36, wid: 24 },
+  hotrod: { len: 40, wid: 22 },
+  coupe: { len: 40, wid: 21 },
+  pickup: { len: 44, wid: 22 },
+  rally: { len: 34, wid: 21 },
+  muscle: { len: 42, wid: 23 },
+  sled: { len: 40, wid: 20 },
+  truck: { len: 40, wid: 28 },
 };
 
 // Draw a pixel-art car centred at (x, y) facing `angle` (menus and previews).
 // `scale` is relative to the old vector size and maps to a whole-pixel zoom.
 function drawCar(ctx, drv, x, y, angle, o = {}) {
-  const spr = carSprite(drv, 0.6);
-  const k = Math.max(1, Math.round((o.scale || 1) * 1.6));
+  const spr = carSprite(drv, 0.8);
+  const k = Math.max(1, Math.round((o.scale || 1) * 1.2));
   ctx.save();
   if (o.alpha != null) ctx.globalAlpha *= o.alpha;
   blitRot(ctx, spr.shadow, x + 2 * k, y + 3 * k, angle, k);

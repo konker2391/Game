@@ -93,7 +93,8 @@ blocks controller access, the game keeps running on keyboard and touch, and the 
 | `js/car.js` | Arcade car physics (grip and drift model) |
 | `js/race.js` | Race simulation: laps, collisions, weapons, hazards, effects, cameras, HUD |
 | `js/ai.js` | Computer drivers |
-| `js/pixel.js` | Pixel-art rendering: bitmap font, car and item sprites, dithered ground tiles, track texture baking |
+| `js/pixel.js` | Pixel-art rendering: bitmap font, item sprites, dithered ground tiles, track texture baking |
+| `js/cars.js` | The eight car designs (silhouettes, parts, shading) and their sprite variants |
 | `js/render.js` | Vector source art for scenery and icons (pixelized by `pixel.js`), menu car previews, minimap |
 | `js/ui.js` | Menus and screens |
 | `js/audio.js` | Web Audio sound effects, engine sounds and the music scheduler |
