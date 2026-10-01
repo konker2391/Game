@@ -14,14 +14,28 @@ const Champ = {
       continues: START_CONTINUES,
       points: Object.fromEntries(DRIVERS.map(d => [d.id, 0])),
     };
+    this.pickRivals();
     this.active = true;
     this.save();
     this.shopThen(() => this.intro());
+  },
+  // The same AI rivals race every round of a season.
+  pickRivals() {
+    const d = this.data;
+    const others = DRIVERS.filter(x => !d.players.some(p => p.driverId === x.id));
+    // Saves from before the field was capped keep their highest scorers.
+    const pool = d.trackIdx > 0 ? others.sort((a, b) => (d.points[b.id] || 0) - (d.points[a.id] || 0)) : shuffle(others);
+    d.rivals = pool.slice(0, MAX_RACERS - d.players.length).map(x => x.id);
+  },
+  entrants() {
+    const d = this.data;
+    return DRIVERS.filter(x => d.rivals.includes(x.id) || d.players.some(p => p.driverId === x.id));
   },
   hasSave() { return !!loadJSON('cc_champ', null); },
   resume() {
     this.data = loadJSON('cc_champ', null);
     if (!this.data) return;
+    if (!this.data.rivals) this.pickRivals();
     this.active = true;
     this.intro();
   },
@@ -29,7 +43,7 @@ const Champ = {
   clear() { removeKey('cc_champ'); },
   driverOf(pl) { return DRIVERS.find(d => d.id === pl.driverId); },
   standings() {
-    return DRIVERS.map(d => ({ driver: d, pts: this.data.points[d.id] || 0 })).sort((a, b) => b.pts - a.pts);
+    return this.entrants().map(d => ({ driver: d, pts: this.data.points[d.id] || 0 })).sort((a, b) => b.pts - a.pts);
   },
   intro() { Game.set(new TrackIntroScreen(() => this.race())); },
 
@@ -39,7 +53,7 @@ const Champ = {
       driver: this.driverOf(pl), slot: d.players.length > 1 ? (i ? 'p2' : 'p1') : 'solo',
       upgrades: pl.upg, bonusAmmo: pl.bonusAmmo,
     }));
-    const ai = DRIVERS.filter(x => !humans.some(h => h.driver === x));
+    const ai = DRIVERS.filter(x => d.rivals.includes(x.id));
     const make = () => new Race({ trackDef: TRACKS[d.trackIdx], humans, aiDrivers: ai, aiLevel: d.trackIdx });
     Game.set(new RaceScreen(make, results => this.onResults(results)));
   },

@@ -143,6 +143,9 @@ const TRACKS = [
   },
 ];
 
+// Cars on track in one race (human players + AI rivals).
+const MAX_RACERS = 6;
+
 const PRIZES = [5000, 3500, 2500, 1800, 1200, 800, 500, 300];
 const POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
 const QUALIFY_PLACE = 4;

@@ -36,7 +36,9 @@ class Race {
     const diff = DIFFICULTY[Options.difficulty] || DIFFICULTY[1];
     this.aggression = diff.aggression;
     const aiUpg = { engine: Math.min(4, Math.floor(lvl / 2)), tires: Math.min(4, Math.floor(lvl / 2)), armor: Math.min(4, Math.floor(lvl / 3)) };
-    const aiCars = (this.practice ? [] : opts.aiDrivers).map(d => new Car(d, {
+    const humanCount = (opts.humans || []).length;
+    const aiDrivers = this.practice ? [] : opts.aiDrivers.slice(0, Math.max(0, MAX_RACERS - humanCount));
+    const aiCars = aiDrivers.map(d => new Car(d, {
       upgrades: aiUpg, speedMul: 0.86 + lvl * 0.018 + diff.speed + rand(-0.015, 0.015), bonusAmmo: Math.floor(lvl / 2),
     }));
     const humanCars = (opts.humans || []).map((h, i) => new Car(h.driver, {
@@ -44,7 +46,7 @@ class Race {
     }));
     // Humans start mid-pack.
     const grid = shuffle(aiCars.slice());
-    const humanStart = Math.min(4, grid.length);
+    const humanStart = Math.ceil(grid.length / 2);
     grid.splice(humanStart, 0, ...humanCars);
     grid.forEach((c, k) => {
       c.placeAt(this.track.gridSlot(k));

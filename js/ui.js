@@ -179,7 +179,7 @@ function drawTrackPreview(ctx, track, x, y, w, h) {
 class TitleScreen {
   constructor() {
     this.t = 0;
-    this.attract = new Race({ trackDef: TRACKS[Math.floor(Math.random() * TRACKS.length)], humans: [], aiDrivers: shuffle(DRIVERS.slice()), aiLevel: 4, attract: true });
+    this.attract = new Race({ trackDef: TRACKS[Math.floor(Math.random() * TRACKS.length)], humans: [], aiDrivers: shuffle(DRIVERS.slice()).slice(0, MAX_RACERS), aiLevel: 4, attract: true });
     this.menu = new Menu([
       { label: '1 PLAYER CHAMPIONSHIP', action: () => Game.set(new DriverSelectScreen(1, drivers => Champ.start(1, drivers))) },
       { label: '2 PLAYER CHAMPIONSHIP', action: () => Game.set(new DriverSelectScreen(2, drivers => Champ.start(2, drivers))) },
@@ -418,8 +418,8 @@ class TrackSelectScreen {
       Game.set(new RaceScreen(make, null, { onChangeTrack: () => Game.set(new TrackSelectScreen(this.drivers, { practice: true })) }));
       return;
     }
-    const ai = DRIVERS.filter(d => !this.drivers.includes(d));
-    const make = () => new Race({ trackDef: TRACKS[this.sel], humans, aiDrivers: ai, aiLevel: 3, laps: this.laps });
+    const others = DRIVERS.filter(d => !this.drivers.includes(d));
+    const make = () => new Race({ trackDef: TRACKS[this.sel], humans, aiDrivers: shuffle(others.slice()), aiLevel: 3, laps: this.laps });
     Game.set(new RaceScreen(make, results => Game.set(new ResultsScreen(results, null, make))));
   }
   update(dt) {

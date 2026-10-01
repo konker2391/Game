@@ -1,7 +1,7 @@
 # Combat Circuit
 
 A top-down vehicular combat racer for the browser, inspired by Sega's 1994 Genesis game *Combat Cars*.
-Pick one of eight armed drivers, race seven rivals over eight tracks, blow them off the road, and spend
+Pick one of eight armed drivers, race five rivals (six cars per race) over eight tracks, blow them off the road, and spend
 your winnings in the garage between races.
 
 It is plain HTML5 canvas and JavaScript with no build step and no dependencies. Graphics and sound are generated in code.
@@ -35,14 +35,15 @@ python3 -m http.server 8000
 
 - **8 tracks** across six terrains: desert, arctic (icy grip), neon city at night, jungle, scrapyard and
   volcano (the shoulders burn).
-- **Championship mode**: finish 4th or better to advance. Miss the cut and you spend one of 3 continues.
+- **Championship mode**: six cars per race. The same AI rivals, picked at the start of the season, race every
+  round. Finish 4th or better to advance. Miss the cut and you spend one of 3 continues.
   You earn points, prize money and $300 for every rival you wreck. Progress saves automatically, so you can
   continue a championship later.
 - **Garage**: buy engine, tire and armor upgrades (4 levels each) and extra special-weapon ammo.
 - **Track pickups**: `?` crates hold missiles, mines, oil, nitro, freeze bolts, repairs or cash.
   Arrow pads on the road give a speed boost.
 - **2-player split screen** for both championship and quick race.
-- **Quick race**: any track, 1–9 laps.
+- **Quick race**: any track, 1–9 laps, against a random set of rivals each time.
 - **Practice**: drive any track alone to learn it. There are no rivals, crates, weapons or damage. Laps are unlimited
   and timed, with last, best and saved record lap times for each track.
 - The AI takes racing lines, hunts crates, dodges hazards and fires back.

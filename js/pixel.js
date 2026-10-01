@@ -414,7 +414,7 @@ function bakeTrack(track, Z) {
   for (let k = 0; k < N; k++) cells[Math.floor((py[k] - gy0) / GC) * gw + Math.floor((px[k] - gx0) / GC)].push(k);
   const cw = (2 * halfW) / 10;
   const gridSlots = [];
-  for (let k = 0; k < 8; k++) {
+  for (let k = 0; k < MAX_RACERS; k++) {
     const row = Math.floor(k / 2), c = k % 2;
     gridSlots.push({ s: L - 70 - row * 70 - c * 30, lat: c ? track.gridLat : -track.gridLat });
   }
