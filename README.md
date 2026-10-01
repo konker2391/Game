@@ -50,6 +50,13 @@ python3 -m http.server 8000
   supersaw stabs, orchestra hits and risers, arranged in build / drop / breakdown sections. There are
   separate menu, race and victory themes, all synthesized live. Press `M` to mute.
 - Keyboard, gamepad and touch controls.
+- **Options** (main menu or pause menu): music and effects volume, sound and music on/off, difficulty
+  (Easy / Normal / Hard changes AI speed and how often they fire), km/h or mph, screen shake, controller
+  rumble, minimap, fullscreen, and a two-step reset of saved progress and lap records. Settings are saved in
+  the browser.
+- **Exit** asks for confirmation, then closes the window. Browsers only let a page close a window that a script
+  opened, so when closing isn't allowed the game stops its music and sound and shows a goodbye screen. Press
+  any key there to play again.
 
 ## Controls
 
@@ -92,6 +99,7 @@ blocks controller access, the game keeps running on keyboard and touch, and the 
 | `js/audio.js` | Web Audio sound effects, engine sounds and the music scheduler |
 | `js/music.js` | Techno songs (chords, patterns, section arrangement) and their synthesizer |
 | `js/input.js` | Keyboard, gamepad, touch and pointer input |
+| `js/options.js` | Saved player settings, difficulty levels, save-data reset |
 | `js/main.js` | Championship flow, main loop, canvas scaling |
 
 To add a track, append an entry to `TRACKS` in `js/data.js` with a closed loop of control points. Roads are

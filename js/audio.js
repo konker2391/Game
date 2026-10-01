@@ -18,8 +18,9 @@ const SFX = {
       this.master = this.ctx.createGain();
       this.master.gain.value = this.muted ? 0 : 0.55;
       this.master.connect(this.ctx.destination);
-      this.sfxGain = this.ctx.createGain(); this.sfxGain.gain.value = 0.8; this.sfxGain.connect(this.master);
-      this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = this.musicOn ? MUSIC_VOL : 0; this.musicGain.connect(this.master);
+      this.sfxGain = this.ctx.createGain(); this.sfxGain.connect(this.master);
+      this.musicGain = this.ctx.createGain(); this.musicGain.connect(this.master);
+      this.applyVolumes();
       const len = this.ctx.sampleRate;
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = this.noiseBuf.getChannelData(0);
@@ -38,7 +39,13 @@ const SFX = {
   toggleMusic() {
     this.musicOn = !this.musicOn;
     saveJSON('cc_music', this.musicOn);
-    if (this.musicGain) this.musicGain.gain.value = this.musicOn ? MUSIC_VOL : 0;
+    this.applyVolumes();
+  },
+  // Options volumes are 0-10; the defaults (music 7, effects 8) give the original mix.
+  applyVolumes() {
+    if (!this.ctx) return;
+    this.musicGain.gain.value = this.musicOn ? MUSIC_VOL * Options.musicVol / 7 : 0;
+    this.sfxGain.gain.value = 0.8 * Options.sfxVol / 8;
   },
 
   tone(freq, dur, o = {}) {

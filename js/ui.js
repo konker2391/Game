@@ -6,7 +6,8 @@ const PAL = {
   gold: '#ffd23f', orange: '#ff7a1a', red: '#e8352a', cyan: '#5ee8ff', green: '#7dff7a', white: '#f4f4f4', grey: '#9aa0c8',
 };
 
-// Keyboard / gamepad / pointer driven vertical menu.
+// Keyboard / gamepad / pointer driven vertical menu. An item with `value` is drawn as a
+// settings row (label left, value right, optional 0-1 `bar`); left/right step its value.
 class Menu {
   constructor(items, o = {}) {
     this.items = items;
@@ -45,7 +46,11 @@ class Menu {
     }
     for (const c of Input.clicks) {
       this.rects.forEach((r, i) => {
-        if (r && this.enabled(i) && hit(c, r)) { this.sel = i; this.activate(); }
+        if (!r || !this.enabled(i) || !hit(c, r)) return;
+        this.sel = i;
+        const item = this.items[i];
+        // Tapping the left third of a settings row steps it back.
+        if (item.left && c.x < r.x + r.w / 3) { item.left(); SFX.play('move'); } else this.activate();
       });
     }
     if (Input.menu('ok')) this.activate();
@@ -71,7 +76,23 @@ class Menu {
         ctx.fillRect(r.x, r.y, 4, r.h); ctx.fillRect(r.x + r.w - 4, r.y, 4, r.h);
       }
       const label = typeof it.label === 'function' ? it.label() : it.label;
-      text(ctx, label, this.x, r.y + (r.h - this.size) / 2, this.size, !en ? '#555a7a' : on ? PAL.gold : PAL.white, 'center');
+      const col = !en ? '#555a7a' : on ? PAL.gold : PAL.white;
+      const ty = r.y + (r.h - this.size) / 2;
+      if (it.value) {
+        const val = it.value();
+        text(ctx, label, r.x + 18, ty, this.size, col);
+        const vx = r.x + r.w - 18;
+        text(ctx, on ? '< ' + val + ' >' : val, vx, ty, this.size, on ? PAL.gold : PAL.cyan, 'right');
+        if (it.bar) {
+          const k = it.bar(), segs = 10, bw = 9, bx = vx - textWidth('< ' + val + ' >', this.size) - 14 - segs * bw;
+          for (let s = 0; s < segs; s++) {
+            ctx.fillStyle = s < Math.round(k * segs) ? (on ? PAL.gold : PAL.cyan) : 'rgba(255,255,255,0.12)';
+            ctx.fillRect(bx + s * bw, r.y + r.h / 2 - 5, bw - 3, 10);
+          }
+        }
+      } else {
+        text(ctx, label, this.x, ty, this.size, col, 'center');
+      }
       y += this.h + this.gap;
     });
   }
@@ -166,9 +187,14 @@ class TitleScreen {
       { label: 'QUICK RACE', action: () => Game.set(new PlayerCountScreen()) },
       { label: 'PRACTICE', action: () => Game.set(new DriverSelectScreen(1, d => Game.set(new TrackSelectScreen(d, { practice: true })))) },
       { label: 'HOW TO PLAY', action: () => Game.set(new HelpScreen()) },
-      { label: () => 'SOUND: ' + (SFX.muted ? 'OFF' : 'ON'), action: () => SFX.toggleMute(), left: () => SFX.toggleMute(), right: () => SFX.toggleMute() },
-      { label: () => 'MUSIC: ' + (SFX.musicOn ? 'ON' : 'OFF'), action: () => SFX.toggleMusic(), left: () => SFX.toggleMusic(), right: () => SFX.toggleMusic() },
-    ], { y: 236, w: 420, h: 28, gap: 5, size: 12 });
+      { label: 'OPTIONS', action: () => Game.set(new OptionsScreen(() => Game.set(this))) },
+      { label: 'EXIT', action: () => { this.confirmExit = true; this.exitMenu.sel = 0; } },
+    ], { y: 230, w: 420, h: 26, gap: 4, size: 12 });
+    this.confirmExit = false;
+    this.exitMenu = new Menu([
+      { label: 'NO, KEEP PLAYING', action: () => { this.confirmExit = false; } },
+      { label: 'YES, EXIT', action: () => quitGame() },
+    ], { y: 268, w: 360, h: 32, gap: 8, size: 12 });
   }
   enter() { SFX.stopEngines(); SFX.playSong('menu'); }
   update(dt) {
@@ -178,12 +204,24 @@ class TitleScreen {
     if (Math.floor(this.t / 6) !== Math.floor((this.t - dt) / 6)) {
       this.attract.cams[0].target = choice(this.attract.cars);
     }
+    if (this.confirmExit) {
+      if (Input.menu('back')) { SFX.play('back'); this.confirmExit = false; return; }
+      this.exitMenu.update();
+      return;
+    }
+    if (Input.menu('back')) { SFX.play('select'); this.confirmExit = true; this.exitMenu.sel = 0; return; }
     this.menu.update();
   }
   draw(ctx) {
     this.attract.draw(ctx);
     ctx.fillStyle = 'rgba(8,8,30,0.62)'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     drawLogo(ctx, VIEW_W / 2, 40, this.t);
+    if (this.confirmExit) {
+      drawPanel(ctx, VIEW_W / 2 - 230, 200, 460, 170, PAL.gold);
+      text(ctx, 'EXIT COMBAT CIRCUIT?', VIEW_W / 2, 224, 14, PAL.gold, 'center');
+      this.exitMenu.draw(ctx);
+      return;
+    }
     this.menu.draw(ctx);
     const hint = Input.padCount
       ? Input.padCount + (Input.padCount > 1 ? ' CONTROLLERS' : ' CONTROLLER') + ' READY  ·  D-PAD + A TO SELECT'
@@ -425,8 +463,9 @@ class RaceScreen {
       { label: 'RESUME', action: () => { this.paused = false; } },
       { label: () => (this.race.practice ? 'RESTART PRACTICE' : 'RESTART RACE'), visible: () => !Champ.active, action: () => { this.race = this.makeRace(); this.paused = false; } },
       { label: 'CHANGE TRACK', visible: () => !!opts.onChangeTrack, action: () => { SFX.stopEngines(); opts.onChangeTrack(); } },
+      { label: 'OPTIONS', action: () => Game.set(new OptionsScreen(() => Game.set(this))) },
       { label: 'QUIT TO TITLE', action: () => { SFX.stopEngines(); Game.set(new TitleScreen()); } },
-    ], { y: 230, w: 340 });
+    ], { y: 210, w: 340 });
   }
   enter() { SFX.playSong('race'); }
   update(dt) {
@@ -721,5 +760,100 @@ class FinalScreen {
     }
     this.lines.forEach((l, i) => text(ctx, l, VIEW_W / 2, (this.won ? 340 : 220) + i * 28, 11, PAL.white, 'center'));
     this.menu.draw(ctx);
+  }
+}
+
+// --- Options ---------------------------------------------------------------
+class OptionsScreen {
+  constructor(onBack) {
+    this.onBack = onBack;
+    this.t = 0;
+    this.resetArmed = 0;
+    const set = (k, v) => { Options[k] = v; saveOptions(); SFX.applyVolumes(); };
+    const vol = (k, d) => () => set(k, clamp(Options[k] + d, 0, 10));
+    const flip = k => () => set(k, !Options[k]);
+    const onOff = k => () => (Options[k] ? 'ON' : 'OFF');
+    const fsOk = !!(document.fullscreenEnabled && document.documentElement.requestFullscreen);
+    this.menu = new Menu([
+      { label: 'MUSIC VOLUME', value: () => String(Options.musicVol), bar: () => Options.musicVol / 10, left: vol('musicVol', -1), right: vol('musicVol', 1), action: () => set('musicVol', (Options.musicVol + 1) % 11) },
+      { label: 'EFFECTS VOLUME', value: () => String(Options.sfxVol), bar: () => Options.sfxVol / 10, left: vol('sfxVol', -1), right: vol('sfxVol', 1), action: () => { set('sfxVol', (Options.sfxVol + 1) % 11); SFX.play('pickup'); } },
+      { label: 'SOUND', value: () => (SFX.muted ? 'OFF' : 'ON'), left: () => SFX.toggleMute(), right: () => SFX.toggleMute(), action: () => SFX.toggleMute() },
+      { label: 'MUSIC', value: () => (SFX.musicOn ? 'ON' : 'OFF'), left: () => SFX.toggleMusic(), right: () => SFX.toggleMusic(), action: () => SFX.toggleMusic() },
+      {
+        label: 'DIFFICULTY', value: () => DIFFICULTY[Options.difficulty].name,
+        left: () => set('difficulty', (Options.difficulty + 2) % 3), right: () => set('difficulty', (Options.difficulty + 1) % 3),
+        action: () => set('difficulty', (Options.difficulty + 1) % 3),
+      },
+      { label: 'SPEED UNITS', value: () => (Options.units === 'mph' ? 'MPH' : 'KM/H'), left: () => set('units', Options.units === 'mph' ? 'kmh' : 'mph'), right: () => set('units', Options.units === 'mph' ? 'kmh' : 'mph'), action: () => set('units', Options.units === 'mph' ? 'kmh' : 'mph') },
+      { label: 'SCREEN SHAKE', value: onOff('shake'), left: flip('shake'), right: flip('shake'), action: flip('shake') },
+      { label: 'CONTROLLER RUMBLE', value: onOff('rumble'), left: flip('rumble'), right: flip('rumble'), action: () => { flip('rumble')(); if (Options.rumble) Input.rumble('p1', 0.6, 200); } },
+      { label: 'MINIMAP', value: onOff('minimap'), left: flip('minimap'), right: flip('minimap'), action: flip('minimap') },
+      {
+        label: 'FULLSCREEN', value: () => (!fsOk ? 'N/A' : document.fullscreenElement ? 'ON' : 'OFF'), enabled: () => fsOk,
+        left: () => toggleFullscreen(), right: () => toggleFullscreen(), action: () => toggleFullscreen(),
+      },
+      {
+        label: () => (this.resetArmed > 0 ? 'PRESS AGAIN TO ERASE' : 'RESET RECORDS & SAVE'), value: () => (this.resetArmed > 0 ? '!!' : ''),
+        action: () => {
+          if (this.resetArmed > 0) { resetSaveData(); this.resetArmed = 0; Input.toast('RECORDS AND SAVE ERASED'); }
+          else this.resetArmed = 3;
+        },
+      },
+      { label: 'BACK', action: () => this.back() },
+    ], { y: 64, w: 560, h: 28, gap: 5, size: 12 });
+  }
+  back() { saveOptions(); this.onBack(); }
+  update(dt) {
+    this.t += dt;
+    if (this.resetArmed > 0) this.resetArmed = Math.max(0, this.resetArmed - dt);
+    if (Input.menu('back')) { SFX.play('back'); this.back(); return; }
+    this.menu.update();
+  }
+  draw(ctx) {
+    drawBackdrop(ctx, this.t);
+    drawHeading(ctx, 'OPTIONS', 14);
+    this.menu.draw(ctx);
+    text(ctx, 'LEFT / RIGHT CHANGE  ·  ENTER TOGGLES  ·  ESC TO GO BACK', VIEW_W / 2, VIEW_H - 62, 8, PAL.grey, 'center');
+  }
+}
+
+function toggleFullscreen() {
+  try {
+    const p = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    if (p && p.catch) p.catch(() => Input.toast('FULLSCREEN NOT ALLOWED HERE'));
+  } catch (e) {
+    Input.toast('FULLSCREEN NOT ALLOWED HERE');
+  }
+}
+
+// --- Exit ---------------------------------------------------------------------
+// A page can only close a window that a script opened, so if the browser refuses we
+// shut the game down (music off, audio suspended) and show a goodbye screen.
+function quitGame() {
+  SFX.stopSong();
+  SFX.stopEngines();
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  try { window.close(); } catch (e) { /* not allowed */ }
+  Game.set(new GoodbyeScreen());
+}
+
+class GoodbyeScreen {
+  constructor() { this.t = 0; }
+  enter() { if (SFX.ctx && SFX.ctx.state === 'running') SFX.ctx.suspend(); }
+  update(dt) {
+    this.t += dt;
+    if (this.t < 0.6) return;   // ignore the key press that chose Exit
+    const pad = Input.pads.some(p => p.a || p.b || p.start);
+    if (Input.pressed.size || Input.clicks.length || pad) {
+      if (SFX.ctx) SFX.ctx.resume();
+      Game.set(new TitleScreen());
+    }
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#05060f'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    drawLogo(ctx, VIEW_W / 2, 90, 0);
+    text(ctx, 'THANKS FOR PLAYING!', VIEW_W / 2, 270, 21, PAL.gold, 'center');
+    text(ctx, 'THE GAME HAS STOPPED. YOU CAN CLOSE THIS TAB NOW.', VIEW_W / 2, 320, 10, PAL.white, 'center');
+    if (Math.floor(this.t * 2) % 2) text(ctx, 'PRESS ANY KEY OR CLICK TO PLAY AGAIN', VIEW_W / 2, 360, 10, PAL.cyan, 'center');
   }
 }

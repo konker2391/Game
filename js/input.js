@@ -163,7 +163,7 @@ const Input = {
   // Rumble the controller behind a player slot. strength 0..1.
   rumble(slot, strength, ms = 120) {
     const gi = this.padIndex[slot === 'p2' ? 1 : 0];
-    if (gi < 0 || strength <= 0) return;
+    if (gi < 0 || strength <= 0 || !Options.rumble) return;
     const gp = this.readPads()[gi];
     const act = gp && gp.vibrationActuator;
     if (!act || !act.playEffect) return;

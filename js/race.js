@@ -33,9 +33,11 @@ class Race {
     this.messages = [];
 
     const lvl = opts.aiLevel || 0;
+    const diff = DIFFICULTY[Options.difficulty] || DIFFICULTY[1];
+    this.aggression = diff.aggression;
     const aiUpg = { engine: Math.min(4, Math.floor(lvl / 2)), tires: Math.min(4, Math.floor(lvl / 2)), armor: Math.min(4, Math.floor(lvl / 3)) };
     const aiCars = (this.practice ? [] : opts.aiDrivers).map(d => new Car(d, {
-      upgrades: aiUpg, speedMul: 0.86 + lvl * 0.018 + rand(-0.015, 0.015), bonusAmmo: Math.floor(lvl / 2),
+      upgrades: aiUpg, speedMul: 0.86 + lvl * 0.018 + diff.speed + rand(-0.015, 0.015), bonusAmmo: Math.floor(lvl / 2),
     }));
     const humanCars = (opts.humans || []).map((h, i) => new Car(h.driver, {
       human: true, slot: h.slot, playerIndex: i, upgrades: h.upgrades, bonusAmmo: h.bonusAmmo || 0,
@@ -729,8 +731,9 @@ class Race {
     const bk = this.bake;
     ctx.save();
     ctx.beginPath(); ctx.rect(vp.x, vp.y, vp.w, vp.h); ctx.clip();
-    const shx = cam.shake ? Math.round(rand(-cam.shake, cam.shake) * Z) : 0;
-    const shy = cam.shake ? Math.round(rand(-cam.shake, cam.shake) * Z) : 0;
+    const sh = Options.shake ? cam.shake : 0;
+    const shx = sh ? Math.round(rand(-sh, sh) * Z) : 0;
+    const shy = sh ? Math.round(rand(-sh, sh) * Z) : 0;
     const cx = Math.round(cam.x * Z) + shx, cy = Math.round(cam.y * Z) + shy;
     ctx.translate(vp.x + Math.floor(vp.w / 2) - cx, vp.y + Math.floor(vp.h / 2) - cy);
     const x0 = cx - vp.w / 2 - 2, y0 = cy - vp.h / 2 - 2, x1 = cx + vp.w / 2 + 2, y1 = cy + vp.h / 2 + 2;
@@ -884,15 +887,21 @@ class Race {
     const xr = x0 + w - pad;
     // With on-screen touch buttons the bottom corners are covered, so everything docks at the top.
     const touchUI = Game.touchUI;
-    const kmh = Math.round(Math.abs(car.speed) * 0.68);
-    this.hudRow(ctx, 'SPEED', String(kmh).padStart(3, ' ') + 'KM/H', xr, y0 + pad, 'right');
+    const mph = Options.units === 'mph';
+    const spd = Math.round(Math.abs(car.speed) * (mph ? 0.42 : 0.68));
+    this.hudRow(ctx, 'SPEED', String(spd).padStart(3, ' ') + (mph ? 'MPH' : 'KM/H'), xr, y0 + pad, 'right');
 
     const rightRows = this.practice ? this.drawPracticeTimes(ctx, car, vp, pad, touchUI) : this.drawRaceStatus(ctx, car, vp, pad, split, touchUI);
 
     // Minimap under the right-hand rows.
+    if (Options.minimap) this.drawMinimap(ctx, car, xr, y0 + pad + rightRows * 11 + 3, split);
+    this.drawCentre(ctx, car, vp, split);
+  }
+
+  drawMinimap(ctx, car, xr, my, split) {
     const mw = split ? 48 : 64, mh = split ? 36 : 48;
     const mm = minimapPixel(this.track, mw, mh);
-    const mx = xr - mw, my = y0 + pad + rightRows * 11 + 3;
+    const mx = xr - mw;
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(mx, my, mw, mh);
     ctx.drawImage(mm.canvas, mx, my);
     for (const c of this.cars) {
@@ -903,8 +912,10 @@ class Race {
       ctx.fillStyle = me ? (Math.floor(this.t * 4) % 2 ? '#ffffff' : c.driver.color) : c.driver.color;
       ctx.fillRect(px - (me ? 1 : 0), py - (me ? 1 : 0), me ? 3 : 1, me ? 3 : 1);
     }
+  }
 
-    // Centre messages.
+  drawCentre(ctx, car, vp, split) {
+    const x0 = vp.x, y0 = vp.y, w = vp.w, h = vp.h;
     const cx = x0 + w / 2;
     const big = split ? 1 : 2;
     if (this.state === 'countdown') {
